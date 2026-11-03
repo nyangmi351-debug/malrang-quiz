@@ -176,8 +176,13 @@ export function loadQrLib() {
 }
 
 export async function renderQr(container, text, size = 168) {
+  // 같은 상자에 여러 번 그려 달라고 해도 "마지막 요청" 하나만 그려요.
+  // (예전에는 QR 라이브러리를 불러오는 동안 두 번 요청되면 QR이 2개 겹쳐 보였어요.)
+  const mine = (container._qrSeq = (container._qrSeq || 0) + 1);
   clear(container);
   const ok = await loadQrLib();
+  if (container._qrSeq !== mine) return false;   // 그 사이에 더 새로운 요청이 있었어요
+  clear(container);                               // 혹시 남은 그림이 있으면 지우고 그려요
   if (ok) {
     try {
       new window.QRCode(container, { text, width: size, height: size, correctLevel: window.QRCode.CorrectLevel.M });

@@ -8,6 +8,7 @@ import { wordForm } from './forms.js';
 import * as D from './db.js';
 import * as W from './words.js';
 import { mountQuestions } from './teacher-questions.js';
+import { downloadWordsXlsx, exportableWords } from './word-export.js';
 
 const FILTERS = [['pending', '검수 대기'], ['assigned', '작성 전'], ['approved', '승인됨'], ['all', '전체']];
 const SYNC_TEXT = { idle: '', pending: '저장 대기 중…', saving: '저장하는 중…', done: '동기화 완료 ✓', error: '동기화 실패 (다시 시도 중)' };
@@ -105,8 +106,18 @@ export function mountWordsTab(box, T) {
     const count = (st) => (st === 'all' ? words.length : words.filter((w) => w.status === st).length);
     const shown = words.filter((w) => filter === 'all' || w.status === filter).sort((a, b) => (a.word < b.word ? -1 : 1));
     const approvable = words.filter((w) => w.status === 'pending' && w.meaning);
+    const exportCount = exportableWords(words).length;
     mount(listBox,
       h('div', { class: 'row-between' }, h('h3', null, '단어 검수'),
+        h('div', { class: 'chips' },
+        h('button', {
+          class: 'btn small ghost', type: 'button', disabled: !exportCount, dataset: { act: 'export-words' },
+          title: '뜻이 적힌 카드를 엑셀 표(.xlsx)로 내려받아요',
+          onclick: () => {
+            try { const n = downloadWordsXlsx({ words: T.data.get('words') || [], students: T.students, roomName: T.room && T.room.roomName }); toast(`단어 카드 ${n}개를 엑셀 파일로 내려받았어요.`, 'ok'); }
+            catch (e) { handleError(e, { teacher: true }); }
+          }
+        }, `📥 엑셀로 내려받기 (${exportCount})`),
         h('button', {
           class: 'btn small primary', type: 'button', disabled: !approvable.length,
           onclick: async () => {
@@ -114,7 +125,7 @@ export function mountWordsTab(box, T) {
             try { await W.approveWords(T.code, approvable.map((w) => w.key)); T.data.sync.schedule('words'); toast('승인했어요.', 'ok'); }   // [쓰기]
             catch (e) { handleError(e, { teacher: true }); }
           }
-        }, `전체 승인 (${approvable.length})`)),
+        }, `전체 승인 (${approvable.length})`))),
       h('div', { class: 'chips' }, FILTERS.map(([key, label]) => h('button', {
         class: `chip-btn ${filter === key ? 'on' : ''}`, type: 'button', dataset: { filter: key }, onclick: () => { filter = key; renderList(); }
       }, `${label} ${count(key)}`))),

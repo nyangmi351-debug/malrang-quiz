@@ -247,8 +247,7 @@ export function startTeacher(root, { onHome }) {
       infoCard, controlBox, tabsBox, tabBody));
 
     T.games.attachControl(controlBox);
-    renderInfo();
-    renderQr(qrBox, joinUrl, 168);
+    renderInfo();   // QR도 여기서 한 번 그려요
 
     // 서버 시계와 내 시계의 차이를 재 둬요 (3-4)
     D.syncClock(() => D.setDoc(D.clockRef(code), { t: D.serverTimestamp() }, { merge: true }), D.clockRef(code), 't')   // [쓰기][읽기]
