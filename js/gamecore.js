@@ -108,7 +108,7 @@ export async function setRankingMode(code, on) {
 export async function cleanupGameDocs(code, gameId, known) {
   if (!gameId) return 0;
   const ids = new Set(known || []);
-  ids.add('summary'); ids.add('livecards'); ids.add(`tvview_${gameId}`);
+  ids.add('summary'); ids.add('livecards'); ids.add('liveui'); ids.add(`tvview_${gameId}`);   // livecards: 라이브 카드 배치, liveui: TV 이름 목록 가리기
   let n = 0;
   await D.batchEach([...ids], (b, id) => b.delete(D.gameDoc(code, id)));   // [삭제] 존재하지 않는 ID를 지워도 문제없어요
   n += ids.size;

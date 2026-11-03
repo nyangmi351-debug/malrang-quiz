@@ -200,6 +200,8 @@ export function mountGamesTab(box, T) {
   let formApi = null;
   let lastGameKey = '';
   let timer = null;
+  let ui = null;   // 확인 화면의 조각들 { confirmCard, groupInfo, startBtn, formBox } — 반드시 onRoom()을 부르기 "전에" 만들어 둬요
+                   // (예전에는 이 줄이 아래에 있어서, 참가자 확인 중에 다른 탭에 갔다가 돌아오면 오류가 나고 화면이 멈췄어요)
 
   const offs = [T.on('room', onRoom), T.on('students', () => { if (T.room.gameState.mode === 'confirm') drawConfirm(); })];
   onRoom();
@@ -228,15 +230,16 @@ export function mountGamesTab(box, T) {
   }
 
   async function startConfirm() {
-    try { picked.clear(); const id = await G.beginConfirm(T.code, T.tabId); if (!id) toast('지금은 참가자 확인을 시작할 수 없어요.', 'warn'); }   // [읽기][쓰기]
-    catch (e) { handleError(e, { teacher: true }); }
+    try {
+      picked.clear();
+      const id = await G.beginConfirm(T.code, T.tabId);   // [읽기][쓰기]
+      if (!id) { toast('지금은 참가자 확인을 시작할 수 없어요.', 'warn'); lastGameKey = ''; onRoom(); }   // 화면이 실제 상태와 어긋났다면 다시 맞춰요
+    } catch (e) { handleError(e, { teacher: true }); }
   }
 
   /* ── 참가자 확인 결과 + 게임 고르기 ──
      화면 뼈대(buildConfirm)는 한 번만 만들고, 학생 응답이 들어올 때는 확인 카드(refreshConfirm)만 새로 그려요.
      그래야 선생님이 게임 설정을 입력하는 중에 입력칸이 지워지지 않아요. */
-  let ui = null;   // { confirmCard, groupInfo, startBtn, formBox }
-
   function currentParticipants() {
     const gs = T.room.gameState;
     const pingId = gs.payload && gs.payload.pingId;

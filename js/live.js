@@ -39,6 +39,8 @@ function createView({ role, code, getMe, getRoom }) {
   mount(el, head, main);
   const timerEl = h('strong', { class: 'timer-chip big', dataset: { stat: 'timer' } });
   let gs = null, stopCd = null, cdKey = '', renderKey = '', busy = false, unsubResp = null, respKey = '', countsEl = null, mine = {}, loadedFor = '';
+  // 발표(TV) 화면 전용: 이번 문제 응답, 정답자 게이지, 이름 목록, 교사가 정한 "이름 가리기"
+  let rows = [], gauge = null, namesEl = null, liveUi = { hideOk: false, hideWrong: false }, unsubUi = null, uiKey = '';
   const storeKey = () => `malrang_live_${gs.gameId}`;
 
   const qOf = () => gs.payload.questions[gs.round - 1];
@@ -118,41 +120,114 @@ function createView({ role, code, getMe, getRoom }) {
     }
     box.append(status);
     if (interactive) box.append(failBtn);
-    countsEl = role === 'present' ? h('p', { class: 'live-counts', dataset: { stat: 'counts' } }, '') : null;
-    if (countsEl) box.append(countsEl);
+    if (role === 'present') {
+      gauge = makeGauge();
+      countsEl = h('p', { class: 'live-counts', dataset: { stat: 'counts' } }, '');
+      box.append(gauge.el, countsEl);
+    } else countsEl = null;
     mount(main, box);
 
     if (mine[qi]) lock('제출했어요! ✅ 결과를 기다려요');
     syncTimer(() => { if (interactive && input && !mine[qi] && input.value.trim()) submit(input.value.trim(), false); });   // 시간이 끝나면 쓰던 답을 자동 제출
-    if (role === 'present') subscribeCounts();
+    if (role === 'present') { subscribeCounts(); paintLive(); }
   }
 
+  /* ── 발표 화면: 정답자 수 게이지 ── */
+  function makeGauge() {
+    const fill = h('div', { class: 'lg-fill' });
+    const label = h('div', { class: 'lg-label', dataset: { stat: 'gauge-label' } });
+    const track = h('div', { class: 'lg-track', role: 'progressbar', 'aria-valuemin': '0', 'aria-label': '맞힌 친구 수' }, fill, label);
+    const el = h('div', { class: 'live-gauge', dataset: { stat: 'gauge' } }, track);
+    return {
+      el,
+      set(n, total) {
+        const pct = total > 0 ? Math.max(0, Math.min(100, (n / total) * 100)) : 0;
+        label.textContent = `맞힌 친구 ${n} / ${total}명`;
+        track.setAttribute('aria-valuemax', String(total)); track.setAttribute('aria-valuenow', String(n));
+        el.dataset.pct = String(Math.round(pct));
+        el.classList.toggle('full', total > 0 && n >= total);
+        // 처음 그릴 때는 0%에서 시작해서 "차오르는" 모습이 보여요
+        if (!fill.isConnected || !fill.dataset.drawn) { fill.dataset.drawn = '1'; requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = `${pct}%`; })); }
+        else fill.style.width = `${pct}%`;
+      }
+    };
+  }
+
+  /* ── 발표 화면: 응답 듣기(문항당 한 번만 켜서 정답 공개·결과까지 그대로 써요) ── */
   function subscribeCounts() {
     const k = `${gs.gameId}:${gs.round}`;
     if (respKey === k) return;
     stopCounts();
-    respKey = k;
+    respKey = k; rows = [];
     const q = D.query(D.gamesCol(code), D.where('gameId', '==', gs.gameId), D.where('kind', '==', 'live'), D.where('qi', '==', gs.round - 1));
     unsubResp = D.onSnapshot(q, (snap) => {   // [읽기] 문항당 참가자 수만큼
       const set = new Set(ps());
-      const rows = snap.docs.map((d) => d.data()).filter((r) => set.has(r.sid));
-      if (countsEl) countsEl.textContent = `제출 ${rows.length} / ${ps().length}명 · 맞힌 친구 ${rows.filter((r) => r.ok).length}명`;
+      rows = snap.docs.map((d) => d.data()).filter((r) => set.has(r.sid));
+      paintLive();
     }, (e) => handleError(e, {}));
   }
-  function stopCounts() { if (unsubResp) { unsubResp(); unsubResp = null; } respKey = ''; }
+  function stopCounts() { if (unsubResp) { unsubResp(); unsubResp = null; } respKey = ''; rows = []; }
+
+  /* 교사가 정한 "이름 가리기"는 작은 문서(games/liveui) 하나로 받아요. 바뀔 때만 읽기 1건이에요. */
+  function subscribeUi() {
+    if (role !== 'present' || uiKey === gs.gameId) return;
+    stopUi();
+    uiKey = gs.gameId;
+    liveUi = { hideOk: false, hideWrong: false };
+    unsubUi = D.onSnapshot(D.gameDoc(code, 'liveui'), (snap) => {   // [읽기] 처음 1번 + 교사가 바꿀 때마다
+      const d = snap.exists() ? snap.data() : null;
+      liveUi = d && d.gameId === gs.gameId ? { hideOk: !!d.hideOk, hideWrong: !!d.hideWrong } : { hideOk: false, hideWrong: false };
+      renderNames();
+    }, (e) => handleError(e, {}));
+  }
+  function stopUi() { if (unsubUi) { unsubUi(); unsubUi = null; } uiKey = ''; }
+
+  function paintLive() {
+    if (!gs) return;
+    const total = ps().length, okN = rows.filter((r) => r.ok).length;
+    if (countsEl) countsEl.textContent = `제출 ${rows.length} / ${total}명 · 맞힌 친구 ${okN}명`;
+    if (gauge) { const r = resultOf(); gauge.set(gs.phase === 'answering' || !r ? okN : r.correct, total); }
+    renderNames();
+  }
+
+  /* 맞힌 친구 / 아쉬운 친구 이름 목록 (정답 공개 때부터). 가리기를 켜면 이름 대신 안내만 보여요. */
+  function renderNames() {
+    if (!namesEl || !gs) return;
+    const names = gs.payload.names || {};
+    const byId = new Map(rows.map((r) => [r.sid, r]));
+    const okL = [], badL = [], noneL = [];
+    ps().forEach((id) => {
+      const r = byId.get(id), nm = names[id] || id;
+      if (r && r.ok) okL.push(nm); else if (r && !r.skipped) badL.push(nm); else noneL.push(nm);   // 못 낸 친구·그림 넘긴 친구는 따로 표시
+    });
+    const chips = (arr, cls) => arr.slice().sort((a, b) => a.localeCompare(b, 'ko')).map((n) => h('span', { class: `ln-chip ${cls}`, title: cls === 'none' ? '시간 안에 내지 못했어요' : null }, n));
+    const col = (key, title, count, hidden, content) => h('section', { class: `ln-col ${key}`, dataset: { col: key } },
+      h('h4', null, title, h('b', { dataset: { stat: `${key}-count` } }, ` ${count}명`)),
+      hidden ? h('div', { class: 'ln-hidden', dataset: { stat: `${key}-hidden` } }, '🙈 이름을 가렸어요')
+        : h('div', { class: 'ln-chips', dataset: { stat: `${key}-names` } }, content.length ? content : h('span', { class: 'muted' }, '아직 없어요')),
+      !hidden && key === 'wrong' && noneL.length ? h('p', { class: 'muted ln-note', dataset: { stat: 'none-note' } }, '회색 이름은 시간 안에 내지 못한 친구예요') : null);
+    mount(namesEl,
+      col('ok', '🎉 맞힌 친구', okL.length, liveUi.hideOk, chips(okL, 'ok')),
+      col('wrong', '🤔 아쉬운 친구', badL.length + noneL.length, liveUi.hideWrong, [...chips(badL, 'bad'), ...chips(noneL, 'none')]));
+  }
 
   /* ── 정답 공개 ── */
   function renderReveal() {
     const q = qOf(), r = resultOf() || { correct: 0 };
     const my = mine[gs.round - 1];
-    mount(main, h('div', { class: 'live-box reveal' },
-      questionBlock(q),
-      h('div', { class: 'live-answer', dataset: { stat: 'answer' } }, `정답: ${q.label}`),
-      h('div', { class: 'total-big' }, h('span', null, '맞힌 친구'), h('strong', { dataset: { stat: 'correct' } }, `${r.correct}명`)),
-      role === 'student' ? h('p', { class: `live-mine ${my && my.ok ? 'ok' : 'bad'}`, dataset: { stat: 'mine' } },
-        my ? (my.ok ? '🎉 맞혔어요!' : (my.skipped ? '그림이 안 보여서 넘겼어요' : '아쉬워요, 다음엔 맞혀 봐요!')) : '제출하지 못했어요') : null));
+    if (role === 'present') { gauge = makeGauge(); namesEl = h('div', { class: 'live-names', dataset: { stat: 'names' } }); }
+    mount(main, h('div', { class: `live-box reveal ${namesEl ? 'has-names' : ''}` },
+      h('div', { class: 'lb-main' },
+        questionBlock(q),
+        h('div', { class: 'live-answer', dataset: { stat: 'answer' } }, `정답: ${q.label}`),
+        gauge ? gauge.el : null,
+        h('div', { class: 'total-big' }, h('span', null, '맞힌 친구'), h('strong', { dataset: { stat: 'correct' } }, `${r.correct}명`)),
+        role === 'student' ? h('p', { class: `live-mine ${my && my.ok ? 'ok' : 'bad'}`, dataset: { stat: 'mine' } },
+          my ? (my.ok ? '🎉 맞혔어요!' : (my.skipped ? '그림이 안 보여서 넘겼어요' : '아쉬워요, 다음엔 맞혀 봐요!')) : '제출하지 못했어요') : null),
+      namesEl));
     if (role === 'student') playSound(my && my.ok ? 'correct' : 'wrong');
     syncTimer();
+    if (role === 'present') { subscribeCounts(); paintLive(); }
   }
 
   /* ── 카드 투표 ── */
@@ -185,15 +260,19 @@ function createView({ role, code, getMe, getRoom }) {
   function renderResult() {
     const p = gs.payload, r = resultOf() || { correct: 0, delta: 0, effect: 'none' };
     const cards = p.cardVote && p.cards ? p.cards : null;
+    if (role === 'present') namesEl = h('div', { class: 'live-names', dataset: { stat: 'names' } });
     const row = cards ? h('div', { class: 'vcards' }, cards.map((c, i) => h('div', { class: `vcard flip ${r.pick === i ? 'picked' : ''}`, dataset: { pos: String(i), effect: c } },
       h('div', { class: 'vc-inner' }, h('div', { class: 'vc-face front' }, h('span', { class: 'vc-back' }, '🎴'), h('strong', null, String(i + 1))),
         h('div', { class: 'vc-face back' }, h('span', { class: 'vc-icon' }, EFFECTS[c].icon), h('span', null, EFFECTS[c].label), h('small', null, `${(r.tally && r.tally[i]) || 0}표`)))))) : null;
-    mount(main, h('div', { class: 'live-box result' },
-      h('div', { class: 'live-answer', dataset: { stat: 'answer' } }, `정답: ${qOf().label}`),
-      row,
-      cards && r.tally ? h('p', { class: 'muted' }, `뽑지 않기 ${r.tally[4] || 0}표 · `, r.pick >= 0 && r.pick <= 3 ? `${r.pick + 1}번 카드가 뽑혔어요!` : '카드를 뽑지 않았어요') : null,
-      h('div', { class: 'live-score-line', dataset: { stat: 'delta' } }, `맞힌 ${r.correct}명 → 기본 ${r.correct}점`, cards ? ` · ${EFFECTS[r.effect || 'none'].label}` : '', h('strong', null, ` = ${signed(r.delta)}점`)),
-      h('div', { class: 'total-big' }, h('span', null, '우리 반 점수'), h('strong', { dataset: { stat: 'total' } }, `${p.score || 0}점`))));
+    mount(main, h('div', { class: `live-box result ${namesEl ? 'has-names' : ''}` },
+      h('div', { class: 'lb-main' },
+        h('div', { class: 'live-answer', dataset: { stat: 'answer' } }, `정답: ${qOf().label}`),
+        row,
+        cards && r.tally ? h('p', { class: 'muted' }, `뽑지 않기 ${r.tally[4] || 0}표 · `, r.pick >= 0 && r.pick <= 3 ? `${r.pick + 1}번 카드가 뽑혔어요!` : '카드를 뽑지 않았어요') : null,
+        h('div', { class: 'live-score-line', dataset: { stat: 'delta' } }, `맞힌 ${r.correct}명 → 기본 ${r.correct}점`, cards ? ` · ${EFFECTS[r.effect || 'none'].label}` : '', h('strong', null, ` = ${signed(r.delta)}점`)),
+        h('div', { class: 'total-big' }, h('span', null, '우리 반 점수'), h('strong', { dataset: { stat: 'total' } }, `${p.score || 0}점`))),
+      namesEl));
+    if (role === 'present') { subscribeCounts(); paintLive(); }
     requestAnimationFrame(() => setTimeout(() => main.querySelectorAll('.vcard.flip').forEach((c, i) => setTimeout(() => c.classList.add('flipped'), i * 220)), 60));
     if (role === 'student') playSound(r.delta > 0 ? 'correct' : r.delta < 0 ? 'wrong' : 'tick');
     syncTimer();
@@ -204,7 +283,9 @@ function createView({ role, code, getMe, getRoom }) {
     const key = `${gs.phase}:${gs.round}`;
     if (key === renderKey) return;
     renderKey = key;
-    if (gs.phase !== 'answering') stopCounts();
+    gauge = null; namesEl = null; countsEl = null;
+    // 발표 화면은 문항이 끝날 때까지 응답 듣기를 그대로 켜 둬요(정답 공개·결과에서 이름 목록에 다시 써요). 학생 화면은 듣지 않아요.
+    if (role !== 'present' || !['answering', 'reveal', 'vote', 'result'].includes(gs.phase)) stopCounts();
     if (gs.phase === 'answering') renderAnswering();
     else if (gs.phase === 'reveal') renderReveal();
     else if (gs.phase === 'vote') renderVote();
@@ -217,9 +298,10 @@ function createView({ role, code, getMe, getRoom }) {
       if (!gs || gs.gameId !== next.gameId) { renderKey = ''; cdKey = ''; loadedFor = ''; }
       gs = next;
       loadMine();
+      subscribeUi();
       render();
     },
-    destroy() { stopCounts(); if (stopCd) stopCd(); }
+    destroy() { stopCounts(); stopUi(); if (stopCd) stopCd(); }
   };
 }
 
@@ -227,6 +309,7 @@ function createView({ role, code, getMe, getRoom }) {
 function createDriver(host) {
   const code = host.code;
   let resp = {}, votes = {}, layout = null, advancing = false, bodyEl = null;
+  let uiFlags = { hideOk: false, hideWrong: false }, uiWatching = false;   // TV 이름 목록 가리기 상태(games/liveui 문서와 같아요)
   const P = () => host.gs.payload;
   const qi = () => host.gs.round - 1;
   const partSet = () => new Set(P().participants);
@@ -241,6 +324,25 @@ function createDriver(host) {
       const ok = await host.go(patch);
       if (!ok) advancing = false;
     } catch (e) { advancing = false; handleError(e, { teacher: true }); }
+  }
+
+  /* TV 이름 목록 가리기: 작은 문서 하나만 바꿔요(쓰기 1건). 방 문서는 건드리지 않아서 학생 화면에 영향이 없어요. */
+  async function setNames(patch) {
+    uiFlags = { ...uiFlags, ...patch };
+    draw();
+    try {
+      await D.setDoc(D.gameDoc(code, 'liveui'), { gameId: host.gs.gameId, kind: 'liveui', hideOk: uiFlags.hideOk, hideWrong: uiFlags.hideWrong });   // [쓰기]
+      host.track('liveui');
+    } catch (e) { handleError(e, { teacher: true }); }
+  }
+  function watchUi() {
+    if (uiWatching) return;
+    uiWatching = true;
+    host.watch(D.gameDoc(code, 'liveui'), (snap) => {   // [읽기] 처음 1번 + 바뀔 때마다 (교사 창을 새로 열었을 때도 현재 상태를 알아요)
+      const d = snap.exists() ? snap.data() : null;
+      uiFlags = d && d.gameId === host.gs.gameId ? { hideOk: !!d.hideOk, hideWrong: !!d.hideWrong } : { hideOk: false, hideWrong: false };
+      draw();
+    }, 'game');
   }
 
   /* 답 쓰기가 끝났어요 → 정답 공개 */
@@ -317,15 +419,26 @@ function createDriver(host) {
       info.push(h('p', null, `이번 문제 ${signed(r ? r.delta : 0)}점 (${r && p.cardVote ? EFFECTS[r.effect || 'none'].label : '카드 없음'})`),
         h('button', { class: 'btn primary', type: 'button', dataset: { act: 'next' }, onclick: nextQuestion }, last ? '결과 보기' : '다음 문제'));
     }
+    const allHidden = uiFlags.hideOk && uiFlags.hideWrong;
+    const namesCtl = h('div', { class: 'live-names-ctl', dataset: { part: 'names-ctl' } },
+      h('span', { class: 'muted' }, '📺 TV 이름 목록 (정답 공개 때부터 나와요)'),
+      h('div', { class: 'chips' },
+        h('button', { class: `btn small ghost ${uiFlags.hideOk ? 'on' : ''}`, type: 'button', dataset: { act: 'names-ok' }, onclick: () => setNames({ hideOk: !uiFlags.hideOk }) },
+          uiFlags.hideOk ? '🙈 맞힌 친구 이름 가림 · 누르면 보이기' : '👀 맞힌 친구 이름 보임 · 누르면 가리기'),
+        h('button', { class: `btn small ghost ${uiFlags.hideWrong ? 'on' : ''}`, type: 'button', dataset: { act: 'names-wrong' }, onclick: () => setNames({ hideWrong: !uiFlags.hideWrong }) },
+          uiFlags.hideWrong ? '🙈 아쉬운 친구 이름 가림 · 누르면 보이기' : '👀 아쉬운 친구 이름 보임 · 누르면 가리기'),
+        h('button', { class: 'btn small ghost', type: 'button', dataset: { act: 'names-all' }, onclick: () => setNames({ hideOk: !allHidden, hideWrong: !allHidden }) }, allHidden ? '이름 모두 보이기' : '이름 모두 가리기')));
     mount(bodyEl, h('div', { class: 'live-ctl' },
       h('div', null, h('strong', null, `문제 ${gs.round}/${p.questions.length}`), ' · ', h('span', { class: 'muted' }, q.prompt || '(그림 문제)'), ' → ', h('strong', { dataset: { stat: 'ctl-answer' } }, q.label)),
-      h('div', { class: 'row-between' }, h('strong', { dataset: { stat: 'ctl-score' } }, `우리 반 ${p.score || 0}점`), h('div', { class: 'chips' }, info))));
+      h('div', { class: 'row-between' }, h('strong', { dataset: { stat: 'ctl-score' } }, `우리 반 ${p.score || 0}점`), h('div', { class: 'chips' }, info)),
+      namesCtl));
   }
 
   return {
     onState(gs) {
       advancing = false;
       resp = {}; votes = {};
+      watchUi();
       if (gs.phase === 'answering') {
         const q = D.query(D.gamesCol(code), D.where('gameId', '==', gs.gameId), D.where('kind', '==', 'live'), D.where('qi', '==', qi()));
         host.watch(q, (snap) => {   // [읽기] 문항당 참가자 수만큼
@@ -360,7 +473,7 @@ export const LIVE = {
 
   renderForm(box, T, prev) {
     const s = T.room.settings;
-    const b = prev || { fmt: s.liveFormat || 'mc', qtype: s.liveQuizType || 'mixed', source: s.liveSource || 'words', time: s.liveTimeLimit || 20, count: s.liveQuestionCount || 10, cardVote: s.cardVoteEnabled !== false };
+    const b = prev || { fmt: s.liveFormat || 'mc', qtype: s.liveQuizType || 'mixed', source: s.liveSource || 'words', time: s.liveTimeLimit || 20, count: s.liveQuestionCount || 10, cardVote: s.cardVoteEnabled !== false, names: s.liveNames || 'both' };
     const sel = (name, opts, val) => h('select', { dataset: { field: name } }, opts.map(([v, l]) => h('option', { value: String(v), selected: String(v) === String(val) }, l)));
     const fmt = sel('live-fmt', [['mc', '4지선다'], ['short', '단답형']], b.fmt);
     const qtype = sel('live-qtype', [['mixed', '섞어서'], ['meaning', '뜻 보고 단어 맞히기'], ['image', '그림 보고 단어 맞히기'], ['example', '예문 빈칸 채우기']], b.qtype);
@@ -368,11 +481,13 @@ export const LIVE = {
     const time = sel('live-time', [[10, '10초'], [20, '20초'], [30, '30초']], b.time);
     const count = h('input', { type: 'number', min: '1', max: '50', value: String(b.count), dataset: { field: 'live-count' } });
     const card = h('input', { type: 'checkbox', checked: b.cardVote, dataset: { field: 'live-card' } });
+    const names = sel('live-names', [['both', '맞힌 친구·아쉬운 친구 모두 보이기'], ['ok', '맞힌 친구만 보이기'], ['none', '이름 가리기']], b.names);
     mount(box,
       h('div', { class: 'form-row' }, field('문제 형식', fmt), field('문제 유형', qtype)),
       h('div', { class: 'form-row' }, field('문제 출처', source), field('문제당 시간', time), field('문제 수', count)),
+      h('div', { class: 'form-row' }, field('TV 이름 목록 (처음 상태)', names), h('p', { class: 'muted' }, '게임 중에도 진행 카드의 버튼으로 가리거나 보일 수 있어요.')),
       h('label', { class: 'chip-check' }, card, ' 카드 뽑기 투표 사용'));
-    return { read: () => ({ fmt: fmt.value, qtype: qtype.value, source: source.value, time: Number(time.value), count: Math.max(1, Math.min(50, Math.floor(Number(count.value)) || 10)), cardVote: card.checked }) };
+    return { read: () => ({ fmt: fmt.value, qtype: qtype.value, source: source.value, time: Number(time.value), count: Math.max(1, Math.min(50, Math.floor(Number(count.value)) || 10)), cardVote: card.checked, names: names.value }) };
   },
 
   async prepare(T, o, { participants }) {
@@ -386,10 +501,14 @@ export const LIVE = {
     const prepared = {
       phase: 'answering', round: 1, notes,
       payload: { questions, timeLimit: o.time, cardVote: o.cardVote, score: 0, results: {}, cards: null },
-      settingsPatch: { liveFormat: o.fmt, liveQuizType: o.qtype, liveSource: o.source, liveTimeLimit: o.time, liveQuestionCount: o.count }
+      settingsPatch: { liveFormat: o.fmt, liveQuizType: o.qtype, liveSource: o.source, liveTimeLimit: o.time, liveQuestionCount: o.count, liveNames: o.names }
     };
     prepared.phaseEndsAt = D.now() + o.time * 1000;
-    prepared.setup = async () => { prepared.phaseEndsAt = D.now() + o.time * 1000; };   // 시작 직전에 다시 계산
+    prepared.setup = async (gameId) => {
+      prepared.phaseEndsAt = D.now() + o.time * 1000;   // 시작 직전에 다시 계산
+      // TV 이름 목록의 처음 상태(가림 여부)를 문서 하나에 적어 둬요. 게임이 끝나면 임시 문서와 함께 지워져요.
+      await D.setDoc(D.gameDoc(T.code, 'liveui'), { gameId, kind: 'liveui', hideOk: o.names === 'none', hideWrong: o.names !== 'both' });   // [쓰기]
+    };
     return prepared;
   },
 

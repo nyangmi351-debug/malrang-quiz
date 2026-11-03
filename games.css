@@ -116,6 +116,38 @@
 .live-view.present .vcard { width: 170px; height: 210px; }
 .live-view.present .live-prompt { font-size: 2.6rem; }
 
+/* 라이브 퀴즈: 정답자 수 게이지 + 맞힌/아쉬운 친구 이름 목록 (발표 화면) */
+.live-gauge { width: 100%; max-width: 820px; margin: 4px auto; }
+.lg-track { position: relative; height: 3em; border-radius: 999px; background: #EAF0FB; border: 2px solid var(--line); overflow: hidden; box-shadow: inset 0 2px 6px rgba(43, 45, 66, .08); }
+.lg-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #7ED6A0, #2FB36B); transition: width .7s cubic-bezier(.22, .9, .3, 1); }
+.lg-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.05em; color: var(--text); text-shadow: 0 0 6px #fff, 0 0 6px #fff, 0 0 3px #fff; }
+.live-gauge.full .lg-fill { background: linear-gradient(90deg, #FFD66B, #FFB02E); animation: lg-pulse 1s ease-in-out infinite alternate; }
+@keyframes lg-pulse { from { filter: brightness(1); } to { filter: brightness(1.12); } }
+@media (prefers-reduced-motion: reduce) { .lg-fill { transition: none; } .live-gauge.full .lg-fill { animation: none; } }
+.live-names { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 1100px; text-align: left; }
+.ln-col { background: #fff; border: 2px solid var(--line); border-radius: 16px; padding: 8px 12px 10px; min-height: 4.5em; }
+.ln-col.ok { border-color: #BFE8CF; background: #F3FCF7; } .ln-col.wrong { border-color: #F4D3CB; background: #FFF7F4; }
+.ln-col h4 { margin: 0 0 6px; font-size: .9em; }
+.ln-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ln-chip { padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: .8em; background: #fff; border: 1px solid var(--line); }
+.ln-chip.ok { background: #DDF5E7; border-color: #9ED9B7; } .ln-chip.bad { background: #FFE5DF; border-color: #F2B5A8; }
+.ln-chip.none { background: #F0F0F0; color: var(--muted); border-style: dashed; }
+.ln-note { margin: 6px 0 0; font-size: .7em; }
+.ln-hidden { color: var(--muted); font-weight: 700; padding: 10px 0; text-align: center; font-size: .85em; }
+.live-names-ctl { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.live-names-ctl .btn.on { background: #FFF0D1; border-color: #F0C873; }
+@media (max-width: 640px) { .live-names { grid-template-columns: 1fr; } }
+.lb-main { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+/* 발표 화면(TV)처럼 넓은 화면: 왼쪽에 정답·카드·점수, 오른쪽에 이름 목록을 나란히 놓아요 */
+@media (min-width: 1000px) {
+  .live-view.present .live-box.has-names { max-width: 1500px; flex-direction: row; align-items: flex-start; gap: 24px; }
+  .live-view.present .live-box.has-names .lb-main { flex: 1 1 52%; min-width: 0; gap: 10px; }
+  .live-view.present .live-box.has-names .live-names { flex: 1 1 48%; min-width: 0; grid-template-columns: 1fr; max-height: calc(100vh - 150px); overflow-y: auto; }
+  .live-view.present .live-box.has-names .vcard { width: 130px; height: 160px; }
+  .live-view.present .live-box.has-names .live-prompt { font-size: 2rem; }
+  .live-view.present .live-box.has-names .total-big strong { font-size: 2.4rem; }
+}
+
 @media (max-width: 560px) {
   .live-box .choices { grid-template-columns: 1fr; }
   .vcard { width: 76px; height: 100px; }

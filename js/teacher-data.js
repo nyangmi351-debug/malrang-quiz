@@ -77,6 +77,8 @@ export function createTeacherData(T) {
     release('questions', 'flush');
   }
 
+  const onHide = () => sync.flushNow();
+  const onVis = () => { if (document.visibilityState === 'hidden') sync.flushNow(); };
   function dispose() {
     ['words', 'questions'].forEach((k) => { if (unsub[k]) { unsub[k](); unsub[k] = null; } owners[k].clear(); });
     sync.flushNow();
@@ -84,8 +86,6 @@ export function createTeacherData(T) {
     window.removeEventListener('pagehide', onHide);
     document.removeEventListener('visibilitychange', onVis);
   }
-  const onHide = () => sync.flushNow();
-  const onVis = () => { if (document.visibilityState === 'hidden') sync.flushNow(); };
   window.addEventListener('pagehide', onHide);
   document.addEventListener('visibilitychange', onVis);
 
