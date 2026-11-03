@@ -2,6 +2,7 @@
 
 import { h, storeGet, storeSet } from './core.js';
 import { APP_VERSION, TIMES } from './config.js';
+import { now } from './db.js';
 
 /* ───────── 1. 모둠 색·번호·아이콘 (색만으로 구분하지 않도록 번호와 아이콘도 함께) ───────── */
 export const GROUPS = [
@@ -63,7 +64,7 @@ export function toast(message, kind = 'info', opts = {}) {
 
 /* ───────── 4. 팝업 ───────── */
 export function showModal(content, opts = {}) {
-  const overlay = h('div', { class: 'overlay', role: 'dialog', 'aria-modal': 'true' }, h('div', { class: 'dialog' }, content));
+  const overlay = h('div', { class: 'overlay', role: 'dialog', 'aria-modal': 'true' }, h('div', { class: opts.wide ? 'dialog wide' : 'dialog' }, content));
   function close() { overlay.remove(); if (opts.onClose) opts.onClose(); }
   if (opts.dismissable !== false) {
     overlay.addEventListener('pointerdown', (e) => { if (e.target === overlay) close(); });
@@ -281,4 +282,72 @@ export function topBar({ title, sub, left, right }) {
   return h('header', { class: 'topbar' },
     h('div', { class: 'topbar-left' }, left || null, mascot(40), h('div', { class: 'topbar-title' }, h('strong', null, title), sub ? h('span', { class: 'muted' }, sub) : null)),
     h('div', { class: 'topbar-right' }, right || null));
+}
+
+/* ───────── 10. 안전한 그림 표시 (3-13) ─────────
+   학생이 넣은 주소의 그림은 referrer를 보내지 않고, 불러오지 못하면 안내 글을 보여 줘요. */
+export function safeImg(url, alt = '그림', cls = '', onFail = null) {
+  const wrap = h('span', { class: `img-wrap ${cls}` });
+  const img = h('img', { alt, loading: 'lazy' });
+  img.referrerPolicy = 'no-referrer';
+  img.addEventListener('error', () => { img.remove(); wrap.append(h('span', { class: 'img-fail' }, '그림을 불러올 수 없어요')); wrap.dataset.failed = '1'; if (onFail) onFail(); });
+  img.src = url;
+  wrap.append(img);
+  return wrap;
+}
+
+/* ───────── 11. 남은 시간 표시 ─────────
+   서버 시계로 보정한 now()를 기준으로 endsAt(ms)까지 남은 초를 0.25초마다 갱신해요. 멈추려면 돌려준 함수를 불러요. */
+export function startCountdown(el, endsAt, { onZero, tick = true } = {}) {
+  let lastShown = null, fired = false;
+  const update = () => {
+    const left = Math.max(0, (endsAt - now()) / 1000);
+    const shown = Math.ceil(left);
+    if (shown !== lastShown) {
+      lastShown = shown;
+      el.textContent = String(shown);
+      el.classList.toggle('urgent', shown <= 5);
+      if (tick && shown > 0 && shown <= 3) playSound('tick');
+    }
+    if (left <= 0 && !fired) { fired = true; if (onZero) onZero(); }
+  };
+  update();
+  const timer = setInterval(update, 250);
+  return () => clearInterval(timer);
+}
+
+/* ───────── 12. 화면 꺼짐 방지 (3-10) ───────── */
+let wakeLock = null;
+let wantAwake = false;
+export async function keepAwake(on) {
+  wantAwake = on;
+  try {
+    if (on) {
+      if (!wakeLock && 'wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } else if (wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch { /* 지원하지 않거나 거부되면 그냥 넘어가요 */ }
+}
+document.addEventListener('visibilitychange', () => { if (wantAwake && document.visibilityState === 'visible') keepAwake(true); });
+
+/* ───────── 13. 탭 막대 ───────── */
+/** tabs: [{key,label,badge}] → 눌린 탭의 key로 onSelect를 불러요 */
+export function tabBar(tabs, active, onSelect) {
+  const bar = h('div', { class: 'tabs', role: 'tablist' });
+  tabs.forEach((t) => bar.append(h('button', {
+    class: `tab ${t.key === active ? 'active' : ''}`, type: 'button', role: 'tab', 'aria-selected': String(t.key === active),
+    dataset: { tab: t.key }, onclick: () => onSelect(t.key)
+  }, t.label, t.badge ? h('span', { class: 'badge' }, String(t.badge)) : null)));
+  return bar;
+}
+
+/** 이름 있는 칸 하나(제목 + 내용) */
+export function field(label, control, hint) {
+  return h('div', { class: 'form-col' }, h('label', null, label), control, hint ? h('p', { class: 'muted' }, hint) : null);
+}
+
+export function emptyState(text, mood = 'smile') {
+  return h('div', { class: 'empty' }, mascot(72, mood), h('p', { class: 'muted' }, text));
 }

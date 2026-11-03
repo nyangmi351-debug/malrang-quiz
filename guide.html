@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>말랑말랑 퀴즈 놀이터 · 선생님 안내서</title>
+  <style>
+    :root { --bg:#FFF9F0; --text:#2B2D42; --muted:#6E7388; --primary:#4C8DF6; --line:#EFE6D6; --card:#fff; --warn:#FFF0D1; --ok:#E4F7EC; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family: 'Pretendard', system-ui, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif; line-height:1.65; font-size:16px; }
+    main { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
+    h1 { font-size: 1.9rem; margin: .2em 0; } h2 { font-size: 1.3rem; margin: 1.6em 0 .4em; padding-bottom: 4px; border-bottom: 3px solid var(--primary); }
+    h3 { font-size: 1.05rem; margin: 1em 0 .2em; }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 6px 20px 16px; margin: 14px 0; }
+    ol, ul { padding-left: 1.3em; margin: .3em 0; } li { margin: .15em 0; }
+    table { border-collapse: collapse; width: 100%; font-size: .95rem; margin: .5em 0; }
+    th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; } th { background: #F3F7FF; }
+    .tip, .warn { border-radius: 12px; padding: 8px 12px; margin: .6em 0; } .tip { background: var(--ok); } .warn { background: var(--warn); }
+    kbd { background:#eee; border:1px solid #ccc; border-radius:4px; padding:0 5px; font-size:.9em; }
+    .muted { color: var(--muted); font-size: .92em; }
+    a { color: var(--primary); }
+    @media print { body { background:#fff; font-size: 12px; } section { break-inside: avoid; border: 1px solid #ccc; } main { padding: 0; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>🫧 말랑말랑 퀴즈 놀이터 · 선생님 안내서</h1>
+  <p class="muted">인쇄해서(Ctrl+P) 책상에 두고 쓰셔도 좋아요. 앱 화면으로 돌아가려면 <a href="./">여기</a>를 눌러 주세요.</p>
+
+  <section>
+    <h2>① 처음 시작하기 (딱 한 번)</h2>
+    <ol>
+      <li>앱 주소를 열고 <b>교사용</b>을 눌러요.</li>
+      <li><b>새 PIN 만들기</b>를 눌러 숫자 4자리를 두 번 입력해요. 이 PIN은 선생님의 <b>아이디</b>예요. 같은 PIN으로 들어오면 <b>내가 만든 방만</b> 보여요. 다른 선생님은 다른 PIN을 만들면 서로의 방이 섞이지 않아요.</li>
+      <li><b>방 만들기</b>에서 방 이름과 모둠 수(1~6)를 정해요. 6자리 <b>방 코드</b>와 <b>QR</b>이 나와요.</li>
+    </ol>
+    <div class="warn">⚠️ PIN은 비밀번호가 아니라 아이디예요. 남에게 알려 주면 그 사람도 내 방을 볼 수 있어요. 학생에게는 PIN 대신 <b>방 코드/QR</b>만 알려 주세요. PIN을 잊어버리면 방을 찾을 수 없으니 꼭 적어 두세요.</div>
+  </section>
+
+  <section>
+    <h2>② 학생 들어오기</h2>
+    <ul>
+      <li>학생은 태블릿으로 QR을 찍거나, 앱 주소에서 방 코드를 입력해요 → <b>닉네임</b> → <b>모둠 고르기</b>.</li>
+      <li>실명 대신 별명을 쓰게 해 주세요. 같은 닉네임은 한 방에 하나만 쓸 수 있어요. 학생이 나갔다 다시 들어오면 <b>점수와 기록이 그대로 남아요</b>.</li>
+      <li>교사 화면 <b>[학생]</b> 탭에서 접속 현황을 보고, 모둠을 바꿔 줄 수 있어요.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>③ 단어 모으기와 승인</h2>
+    <ul>
+      <li>학생이 <b>단어 내기</b>(단어·뜻·그림 주소·예문) 또는 <b>문제 내기</b>를 해요. 같은 단어는 저장되지 않아요.</li>
+      <li>선생님은 <b>[단어·문제]</b> 탭에서 <b>승인 / 수정 / 삭제</b>해요. <b>승인된 말만</b> 공부하기와 게임에 쓰여요.</li>
+      <li><b>한꺼번에 등록</b>: 한 줄에 하나씩 붙여 넣고 <code>소탐대실, 속담</code>처럼 쉼표 뒤에 종류(단어/관용 표현/속담)를 쓸 수 있어요. 등록한 카드는 <b>랜덤 배정</b>으로 학생에게 나눠 주면 학생이 뜻을 써서 제출해요.</li>
+      <li>승인·수정·삭제를 하면 3초 뒤에 학생용 묶음이 자동 저장돼요(맨 위에 “저장됨” 표시).</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>④ 공부하기 · 단어 카드 · 순위판</h2>
+    <ul>
+      <li>학생 홈의 <b>공부하기</b>는 승인된 말로 자동 퀴즈(4지선다/단답형)를 내고, 맞히면 개인 점수가 올라가요(5문제마다 저장).</li>
+      <li><b>단어 카드</b>는 앞면(뜻·그림·예문), 뒷면(단어) 플래시카드예요.</li>
+      <li>교사 <b>[학생]</b> 탭의 <b>개인 점수 순위 TV에 띄우기</b>를 누르면 발표 화면(TV)에만 순위가 나와요. <b>개인 점수 초기화</b>로 모두 0점으로 되돌릴 수 있어요.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>⑤ 게임 진행하기 (교사 화면의 [게임] 탭)</h2>
+    <ol>
+      <li><b>참가자 확인 시작</b>을 눌러요. 학생 화면이 켜져 있으면 약 10초 안에 자동으로 “확인됨”이 돼요. 화면이 꺼진 태블릿은 “응답 없음”에 나오니, 체크하면 참가자에 넣을 수 있어요.</li>
+      <li>게임을 고르고 설정(시간·문제 수 등)을 정한 뒤 <b>게임 시작</b>!</li>
+      <li>발표 화면(TV)은 <b>[발표 화면]</b> 버튼으로 새 창을 열어 TV에 띄워요. 전체화면 버튼도 있어요.</li>
+      <li>끝나면 최종 결과가 학생 태블릿과 TV에 같이 나와요. 선생님이 <b>[결과 닫기]</b>를 누르면 처음 화면으로 돌아가고 임시 기록은 자동으로 지워져요.</li>
+      <li>무슨 일이 있어도 <b>[게임 중단]</b>을 누르면 정리하고 처음 상태로 돌아가요.</li>
+    </ol>
+    <table>
+      <tr><th>게임</th><th>방법</th><th>점수</th></tr>
+      <tr><td>🎬 라이브 퀴즈</td><td>모두에게 같은 문제를 내요. 4지선다 또는 단답형. 맞힌 뒤 <b>카드 뽑기 투표</b>(점수 2배/무효/+10/−10 중 뽑을지 함께 정해요)</td><td>반 전체 점수 하나(음수 가능)</td></tr>
+      <tr><td>🙋 전체 스피드 퀴즈</td><td>반에서 한 명씩 돌아가며 말·몸짓으로 설명, 나머지가 정답 입력. 패스 가능</td><td>맞히면 반 +1점</td></tr>
+      <tr><td>⚡ 모둠 스피드 퀴즈</td><td>모둠별로 동시에 진행. 설명자 화면엔 단어만, 나머지는 입력창</td><td>맞히면 모둠 +1점</td></tr>
+      <tr><td>🎨 텔레스트레이션</td><td>그림 → 글 → 그림 → 글 … 이어 가며 마지막 친구가 제시어를 맞혀요. 여러 판 가능</td><td>정답 체인당 모둠 +1점</td></tr>
+    </table>
+    <div class="tip">💡 모둠 게임은 <b>모둠에 3명 이상</b> 모여야 참여해요. 모둠을 고르지 않은 학생은 전체 게임에만 참여해요.</div>
+    <h3>수업 전 점검표</h3>
+    <ul>
+      <li>교사 컴퓨터가 <b>인터넷에 연결</b>되어 있고, 게임 중에는 교사 창을 <b>닫거나 최소화하지 않기</b> (타이머와 진행을 이 창이 맡아요).</li>
+      <li>승인된 말이 충분한지 확인(4지선다는 같은 종류 4개 이상, 스피드 퀴즈 3개 이상, 텔레스트레이션은 모둠 인원 합 이상이면 좋아요).</li>
+      <li>그림 문제는 학생이 낸 <b>https 그림 주소</b>가 열려야 해요. 열리지 않으면 자동으로 다른 문제로 바뀌어요.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>⑥ 문제가 생겼을 때</h2>
+    <table>
+      <tr><th>이런 일이</th><th>이렇게 해요</th></tr>
+      <tr><td>학생이 새로고침하거나 태블릿이 잠깐 꺼졌다 켜졌어요</td><td>자동으로 같은 방·같은 게임으로 돌아와요. 점수와 기록은 그대로예요.</td></tr>
+      <tr><td>게임 중 교사 창을 닫았거나 컴퓨터가 멈췄어요</td><td>같은 PIN으로 다시 들어가 방을 열면 이어서 진행할 수 있어요. 다른 창에서 열렸다면 진행 카드의 <b>[진행 넘겨받기]</b>를 눌러요.</td></tr>
+      <tr><td>설명자 학생이 자리를 비웠어요 (스피드 퀴즈)</td><td>진행 카드의 <b>[설명자 건너뛰기]</b>를 눌러요.</td></tr>
+      <tr><td>화면 위에 “연결이 끊겼어요” 안내가 나와요</td><td>와이파이를 확인해 주세요. 다시 연결되면 자동으로 이어져요.</td></tr>
+      <tr><td>게임이 멈춘 것 같아요</td><td>[게임 중단] 후 다시 [참가자 확인]부터 시작해요.</td></tr>
+      <tr><td>“데이터베이스 규칙이 게시되지 않았어요” 안내가 나와요</td><td>Firebase 콘솔 → Firestore Database → <b>규칙</b> 탭에서 규칙이 <code>allow read, write: if true;</code> 상태로 <b>게시</b>되어 있는지 확인해요. “테스트 모드”로 만든 규칙은 <b>30일 뒤에 저절로 막혀요</b>. 이때는 날짜 조건 대신 <code>if true</code>로 바꿔서 게시하면 돼요.</td></tr>
+      <tr><td>“오늘 사용 한도에 도달했어요” 안내가 나와요</td><td>무료 사용량을 다 쓴 거예요. 다음 날(한국시간 오후 4~5시경 초기화)에 다시 쓸 수 있어요.</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>⑦ 무료 사용량 알아 두기</h2>
+    <p>이 앱은 Firebase 무료 요금제(Spark)를 써요. 하루 한도는 <b>읽기 50,000 · 쓰기 20,000 · 삭제 20,000</b>건이에요. 한도를 넘어도 요금이 청구되지는 않고, 그날은 앱이 일시적으로 멈춰요.</p>
+    <p>학생 28명, 4개 모둠 기준 사용량이에요. 진짜 학생 4명 + 가상 학생 24명으로 직접 돌려서 잰 값이고, 가상 학생은 사람보다 빠르게 풀기 때문에 <b>넉넉하게 잡은 값(상한)</b>이에요. 읽기는 “다른 사람의 화면이 바뀌어서 내 화면에 전해지는 것”도 한 건씩 세요.</p>
+    <table>
+      <tr><th>활동 (28명 기준)</th><th>읽기</th><th>쓰기</th><th>삭제</th></tr>
+      <tr><td>학생 입장 (1명당)</td><td>약 6</td><td>2</td><td>0</td></tr>
+      <tr><td>단어 1개 내기 (1명·1개당)</td><td>약 4</td><td>2</td><td>0</td></tr>
+      <tr><td>교사 승인 (단어 1개 / 10개 연달아)</td><td>2 / 12</td><td>3 / 13</td><td>0</td></tr>
+      <tr><td>공부하기 20문제 (1명당)</td><td>약 1</td><td>4</td><td>0</td></tr>
+      <tr><td>단어 카드</td><td>0</td><td>0</td><td>0</td></tr>
+      <tr><td>라이브 퀴즈 5문제 (카드 투표 포함)</td><td>약 1,200</td><td>약 340</td><td>약 280</td></tr>
+      <tr><td>전체 스피드 퀴즈 1분 / <b>5분</b></td><td>약 1,800 / <b>8,000</b></td><td>약 95 / <b>450</b></td><td>약 2</td></tr>
+      <tr><td>모둠 스피드 퀴즈 1분 / <b>5분</b></td><td>약 2,200 / <b>11,000</b></td><td>약 260 / <b>1,300</b></td><td>약 5</td></tr>
+      <tr><td>텔레스트레이션 1판 (6단계)</td><td>약 1,200</td><td>약 250</td><td>약 175</td></tr>
+      <tr><th>수업 한 번(입장·단어·공부·위 게임 모두, 스피드 5분씩)</th><th>약 22,000</th><th>약 2,800</th><th>약 460</th></tr>
+      <tr><td>하루 한도</td><td>50,000</td><td>20,000</td><td>20,000</td></tr>
+    </table>
+    <div class="tip">👉 <b>읽기가 가장 먼저 닳아요.</b> 스피드 퀴즈가 제일 많이 써요(학생 28명 화면이 문제마다 같이 바뀌기 때문이에요). 모든 게임을 다 하는 수업은 하루 2번이 한계이고, 스피드 퀴즈를 3분으로 줄이거나 한 가지만 고르면 하루에 여러 번 쓸 수 있어요. 한도는 한국시간 오후 4~5시경에 다시 채워져요.</div>
+    <p class="muted">현재 사용량은 Firebase 콘솔 → <b>Firestore Database → 사용량</b> 탭에서 볼 수 있어요.</p>
+    <div class="warn">⚠️ 개발용 테스트 도구(가짜 학생)가 쓰는 읽기·쓰기도 같은 한도에 포함돼요. 시험이 끝나면 꼭 <b>가짜 학생 모두 삭제</b>를 눌러 주세요. 한 학교 전체가 같은 프로젝트를 함께 쓰면 한도가 모두 합쳐진다는 점도 기억해 주세요.</div>
+  </section>
+
+  <section>
+    <h2>⑧ 보안과 개인정보 (꼭 읽어 주세요)</h2>
+    <ul>
+      <li>이 앱은 <b>로그인 없이</b> 쓰도록 만들었어요. 방 코드를 아는 사람은 누구나 들어올 수 있어요. 방 코드는 학생에게만 알려 주세요.</li>
+      <li>Firestore 규칙이 <b>누구나 읽고 쓸 수 있게</b> 열려 있어요. 앱 설정값(apiKey)이 GitHub에 공개되어 있는 것은 웹앱에서는 정상이에요. 하지만 이 때문에 <b>악의적인 사람이 데이터를 지우거나 한도를 소진시킬 수도 있어요</b>. 학급 공개 링크를 학급 밖에 올리지 마세요.</li>
+      <li>학생에게 <b>실명, 연락처, 얼굴 사진</b>을 올리지 않도록 안내해 주세요. 그림 주소는 인터넷에 이미 공개된 그림만 쓰게 해요.</li>
+      <li>PIN은 방 목록을 나누는 용도의 아이디예요. 보안 장치가 아니에요.</li>
+      <li>더 이상 쓰지 않는 방은 <b>[설정] 탭 → 방 삭제</b>로 지워 주세요.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

@@ -7,7 +7,7 @@ import {
   onSnapshot, query, where, orderBy, limit, startAfter, writeBatch, runTransaction,
   serverTimestamp, increment, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import { firebaseConfig, ROOM_LIST_LIMIT } from './config.js';
+import { firebaseConfig } from './config.js';
 import { makeRoomCode } from './core.js';
 
 export const SDK_VERSION = '10.14.1';
@@ -23,7 +23,7 @@ export {
 const app = initializeApp(firebaseConfig);
 // 학교 네트워크(프록시·방화벽)에서 연결이 막히면 자동으로 다른 방식(롱폴링)으로 바꿔 줘요.
 // 오프라인 저장(IndexedDB)은 쓰지 않고 메모리 캐시만 써요.
-export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
 
 /* ───────── 2. 서버 시각 보정 (3-4) ─────────
    태블릿마다 시계가 조금씩 달라요. 서버에 시각을 남기는 쓰기를 한 번 하고,
@@ -49,7 +49,31 @@ export async function syncClock(writeFn, ref, field) {
 export const roomRef = (code) => doc(db, 'rooms', code);
 export const studentsCol = (code) => collection(db, 'rooms', code, 'students');
 export const studentRef = (code, id) => doc(db, 'rooms', code, 'students', id);
+export const wordsCol = (code) => collection(db, 'rooms', code, 'words');
+export const wordRef = (code, id) => doc(db, 'rooms', code, 'words', id);
+export const questionsCol = (code) => collection(db, 'rooms', code, 'questions');
+export const questionRef = (code, id) => doc(db, 'rooms', code, 'questions', id);
+export const packRef = (code, name) => doc(db, 'rooms', code, 'packs', name);
+export const gamesCol = (code) => collection(db, 'rooms', code, 'games');
+export const gameDoc = (code, id) => doc(db, 'rooms', code, 'games', id);
 export const clockRef = (code) => doc(db, 'rooms', code, 'games', 'clock');
+export const teacherRef = (pin) => doc(db, 'teachers', pin);
+
+/** 배열을 n개씩 나눠요(Firestore 일괄 쓰기는 한 번에 500건까지라서 450개씩 끊어 써요) */
+export function chunk(list, size = 450) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+/** 여러 건을 450건씩 끊어서 한꺼번에 써요. fn(batch, item)에서 batch.set/update/delete를 불러요. */
+export async function batchEach(items, fn) {
+  for (const part of chunk(items)) {
+    const batch = writeBatch(db);
+    part.forEach((item) => fn(batch, item));
+    await batch.commit();   // [쓰기/삭제] 건수만큼
+  }
+}
 
 /* ───────── 4. 연결 테스트 (점검 도구) ─────────
    데이터베이스에 정말 쓰고 읽을 수 있는지 확인해요. diagnostics/ping 문서 하나만 써요. */
@@ -70,10 +94,37 @@ export async function connectionTest() {
 
 /* ───────── 5. 방 ───────── */
 
-/** 새 방 문서의 첫 내용. 나중 단계에서 쓸 설정값도 미리 넣어 둬요. */
-function newRoomData(roomName, groupCount) {
+/* ───────── 5-0. 교사 계정 (PIN이 곧 아이디) ─────────
+   teachers/{4자리 PIN} 문서가 있으면 그 PIN으로 로그인할 수 있어요. 비밀번호는 따로 없어요(보안 목적이 아니에요). */
+export async function getTeacher(pin) {
+  return getDoc(teacherRef(pin));   // [읽기]
+}
+
+/** 새 PIN 만들기. 이미 쓰는 사람이 있으면 { created:false } */
+export async function createTeacher(pin, name) {
+  const ref = teacherRef(pin);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);   // [읽기]
+    if (snap.exists()) return { created: false };
+    tx.set(ref, { name: name || '', createdAt: serverTimestamp() });   // [쓰기]
+    return { created: true };
+  });
+}
+
+/** 이 PIN 선생님의 방들(최신순). 색인이 필요 없도록 등호 조건만 쓰고 정렬은 화면에서 해요. */
+export async function fetchRoomsByPin(pin) {
+  const snap = await getDocs(query(collection(db, 'rooms'), where('teacherPin', '==', pin)));   // [읽기] 방 개수만큼
+  const rooms = snap.docs.map((d) => ({ id: d.id, data: d.data({ serverTimestamps: 'estimate' }) }));
+  const ms = (r) => (r.data.createdAt && r.data.createdAt.toMillis ? r.data.createdAt.toMillis() : 0);
+  rooms.sort((a, b) => ms(b) - ms(a));
+  return rooms;
+}
+
+/** 새 방 문서의 첫 내용. 설정값도 미리 넣어 둬요. */
+function newRoomData(roomName, groupCount, teacherPin) {
   return {
     roomName,
+    teacherPin,
     createdAt: serverTimestamp(),
     settings: {
       groupCount, groupEpoch: 0, similarityThreshold: 0.85, cardVoteEnabled: true, autoApproveQuestions: false,
@@ -90,7 +141,7 @@ function newRoomData(roomName, groupCount) {
 }
 
 /** 방을 만들어요. 같은 코드가 이미 있으면 다른 코드로 다시 시도해요. */
-export async function createRoom(roomName, groupCount) {
+export async function createRoom(roomName, groupCount, teacherPin) {
   for (let i = 0; i < 8; i++) {
     const code = makeRoomCode();
     const ref = roomRef(code);
@@ -98,7 +149,7 @@ export async function createRoom(roomName, groupCount) {
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(ref);   // [읽기]
         if (snap.exists()) throw new Error('ROOM_CODE_EXISTS');
-        tx.set(ref, newRoomData(roomName, groupCount));   // [쓰기]
+        tx.set(ref, newRoomData(roomName, groupCount, teacherPin));   // [쓰기]
       });
       return code;
     } catch (err) {
@@ -111,15 +162,6 @@ export async function createRoom(roomName, groupCount) {
 
 export async function getRoom(code) {
   return getDoc(roomRef(code));   // [읽기]
-}
-
-/** 방 목록(최신순). after에 마지막 문서를 넘기면 그다음 20개를 가져와요. */
-export async function fetchRoomList(after) {
-  const parts = [collection(db, 'rooms'), orderBy('createdAt', 'desc')];
-  if (after) parts.push(startAfter(after));
-  parts.push(limit(ROOM_LIST_LIMIT));
-  const snap = await getDocs(query(...parts));   // [읽기] 최대 20개
-  return { docs: snap.docs, hasMore: snap.docs.length === ROOM_LIST_LIMIT };
 }
 
 /** 방과 그 안의 모든 자료(학생, 단어, 문제, 번들, 게임 임시 문서)를 지워요. */

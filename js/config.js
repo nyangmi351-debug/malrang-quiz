@@ -1,8 +1,7 @@
 // js/config.js — 설정 파일 (따로 채울 값은 없어요. 완성본입니다)
-// 교사 PIN을 바꾸고 싶으면 아래 TEACHER_PIN 한 줄의 숫자 4개만 바꾸면 돼요.
+// 교사 PIN은 이제 코드에 적어 두지 않아요. 선생님마다 앱 화면에서 직접 [새 PIN 만들기]로 만들어요.
 
-export const TEACHER_PIN = '0000';   // 기본값. 공개 저장소라 보안용이 아니라 학생의 실수 입장 방지용이에요
-export const APP_VERSION = 'v1-step1';   // 화면 맨 아래에 작게 보여요(배포 확인용). 단계마다 바뀌어요
+export const APP_VERSION = 'v2-final';   // 화면 맨 아래에 작게 보여요(배포 확인용). 업로드가 제대로 됐는지 확인할 때 써요
 
 export const firebaseConfig = {
   apiKey: 'AIzaSyC-AJ4-A-mJvK8eOIEzfSLUJOMTRoGw35Q',
@@ -17,7 +16,8 @@ export const firebaseConfig = {
 // 시간·한도 상수
 export const HEARTBEAT_MS = 5 * 60 * 1000;          // 학생이 "나 접속 중이에요" 신호를 보내는 간격
 export const PRESENCE_WINDOW_MS = 7 * 60 * 1000;    // 이 시간 안에 신호가 있으면 "접속 중"
-export const ROOM_LIST_LIMIT = 20;                  // 방 목록에 한 번에 보여 줄 개수
+export const ROOM_LIST_LIMIT = 20;                  // 방 목록에 한 번에 보여 줄 개수([더 보기]로 더 보여 줘요)
+export const STUDY_FLUSH_EVERY = 5;                 // 공부하기 점수를 5문제마다 한 번에 저장해요
 export const IMAGE_PRELOAD_TIMEOUT_MS = 5000;
 export const LIMITS = { nickname: 10, word: 30, meaning: 200, example: 200, question: 200, choice: 80, imageUrl: 500 };
 export const TIMES = {

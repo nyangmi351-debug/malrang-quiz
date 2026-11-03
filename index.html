@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./games.css">
 </head>
 <body>
   <div id="app"><div class="boot"><p>불러오는 중이에요…</p></div></div>
@@ -31,7 +32,7 @@
       var lines = [
         '앱을 시작하지 못했어요.',
         reason,
-        '확인해 보세요: ① 인터넷이 연결되어 있나요? ② GitHub에 index.html, style.css, js 폴더(안에 파일 8개)가 모두 올라가 있나요? ③ 올린 뒤 1~2분 기다리고 Ctrl+Shift+R로 새로고침해 보세요.'
+        '확인해 보세요: ① 인터넷이 연결되어 있나요? ② GitHub에 index.html, style.css, games.css, guide.html, js 폴더(안에 파일들)가 모두 올라가 있나요? ③ 올린 뒤 1~2분 기다리고 Ctrl+Shift+R로 새로고침해 보세요.'
       ];
       lines.forEach(function (t, i) {
         var p = document.createElement('p');

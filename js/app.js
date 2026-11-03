@@ -40,7 +40,7 @@ function route() {
     startStudent(root, { onHome: showHome, autoSaved: saved });            // 같은 방 → 자동 재입장
   } else if (urlRoom) {
     startStudent(root, { onHome: showHome, prefillRoom: urlRoom });        // 다른 방(QR) → 새 방 코드를 채워서 입장 화면
-  } else if (sessionGet('malrang_teacher_ok') === '1' && sessionGet('malrang_teacher_room')) {
+  } else if (/^\d{4}$/.test(sessionGet('malrang_teacher_pin') || '') && sessionGet('malrang_teacher_room')) {
     startTeacher(root, { onHome: showHome });                              // 교사 창을 새로고침 → 열어 두었던 방으로 복귀
   } else if (savedOk) {
     startStudent(root, { onHome: showHome, autoSaved: saved });            // 저장된 방으로 자동 재입장
