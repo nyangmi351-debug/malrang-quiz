@@ -77,7 +77,7 @@ export function mountStudentsTab(box, T) {
             h('span', { class: 'muted' }, `${list.length}명${gs !== null && gs !== undefined ? ` · 게임 ${gs}점` : ''}`)),
           list.map((s) => tile(s, isOnline(s), groupCount, inGame)));
       })),
-      inGame ? h('p', { class: 'muted' }, '참가자 확인·게임 중에는 학생의 모둠을 바꾸거나 내보낼 수 없어요.') : null);
+      inGame ? h('p', { class: 'muted' }, '참가자 확인·게임 중에는 학생의 모둠을 바꾸거나 퇴출할 수 없어요.') : null);
   }
 
   function tile(s, online, groupCount, inGame) {
@@ -94,32 +94,44 @@ export function mountStudentsTab(box, T) {
     sel.addEventListener('blur', () => { if (pendingRender) setTimeout(renderMonitor, 0); });
     const kickBtn = h('button', {
       class: 'kick-btn', type: 'button', dataset: { act: 'kick', sid: s.id }, disabled: inGame,
-      title: inGame ? '참가자 확인·게임 중에는 내보낼 수 없어요' : '이 학생을 방에서 내보내요', 'aria-label': `${s.nickname} 내보내기`,
+      title: inGame ? '참가자 확인·게임 중에는 퇴출할 수 없어요' : '이 학생을 퇴출하고 자료를 모두 지워요', 'aria-label': `${s.nickname} 퇴출`,
       onclick: () => kick(s)
-    }, '내보내기');
+    }, '퇴출');
     return h('div', { class: `student-tile ${online ? 'online' : 'offline'}${s.isFake ? ' fake' : ''}` },
       h('span', { class: 'dot', title: online ? '접속 중' : '접속 안 함' }),
-      h('span', { class: 'sname' }, s.nickname),
+      h('span', { class: 'sname-row' }, h('span', { class: 'sname' }, s.nickname), kickBtn),
       h('span', { class: 'sscore muted' }, `${s.studyScore || 0}점`),
-      sel, kickBtn);
+      sel);
   }
 
-  /** 학생 내보내기(이름을 잘못 쓴 학생 등): 학생 기록만 지우고, 낸 단어·문제는 그대로 둬요 */
+  /** 학생 퇴출(이름을 잘못 쓴 학생 등): 그 학생의 기록·낸 단어·낸 문제를 모두 완전히 지워요 */
   async function kick(s) {
+    const w = s.wordCount || 0, q = s.questionCount || 0;
     const ok = await confirmDialog({
-      title: `‘${s.nickname}’ 학생을 내보낼까요?`,
-      message: `이 학생의 접속 기록과 공부하기 점수(${s.studyScore || 0}점)가 사라져요.\n이 학생이 낸 단어와 문제는 그대로 남아요.\n학생 화면은 입장 화면으로 돌아가고, 올바른 이름으로 다시 들어올 수 있어요.`,
-      okText: '내보내기', danger: true
+      title: `‘${s.nickname}’ 학생을 퇴출할까요?`,
+      message: `이 학생의 자료가 모두 완전히 삭제돼요. 되돌릴 수 없어요.\n· 공부하기 점수 ${s.studyScore || 0}점\n· 낸 단어 ${w}개 (승인된 단어 포함)\n· 낸 문제 ${q}개 (승인된 문제 포함)\n선생님이 나눠 준 카드를 채웠다면, 그 카드는 빈 카드로 돌아가요.\n학생 화면은 입장 화면으로 돌아가고, 같은 이름으로 다시 들어오면 처음부터 시작해요.`,
+      okText: '퇴출하기', danger: true
     });
     if (!ok) return;
     try {
-      const r = await D.kickStudent(T.code, s.id);   // [읽기][삭제][쓰기]
+      const r = await D.kickStudent(T.code, s.id);   // [읽기][삭제][쓰기] 학생 자료 수만큼
       if (!r.ok) {
-        toast(r.reason === 'busy' ? '참가자 확인이나 게임이 진행 중이라 지금은 내보낼 수 없어요. 끝난 뒤에 해 주세요.' : '방을 찾을 수 없어요.', 'warn');
+        toast(r.reason === 'busy' ? '참가자 확인이나 게임이 진행 중이라 지금은 퇴출할 수 없어요. 끝난 뒤에 해 주세요.' : '방을 찾을 수 없어요.', 'warn');
         return;
       }
-      toast(r.already ? '이미 방에 없는 학생이에요.' : `‘${r.nickname}’ 학생을 내보냈어요.`, 'ok');
-      try { await D.releaseAssignedCards(T.code, s.id); } catch (e) { console.error('[배정 카드 되돌리기 오류]', e); }   // [읽기][쓰기] 비어 있는 배정 카드만 담당자 없음으로
+      // 번들(공부하기·게임에 쓰는 승인 목록)과 선생님 목록이 새로 정리되도록 알려요
+      try {
+        if (r.words || r.cards || r.approvedWords) await T.data.changed('words', { reload: true });   // [읽기] 목록을 새로 읽고 번들 저장을 예약
+        if (r.questions || r.approvedQuestions) await T.data.changed('questions', { reload: true });   // [읽기]
+        await T.data.sync.flushNow();   // [쓰기] 3초 기다리지 않고 바로 번들에 반영(퇴출한 학생의 자료가 번들에 남지 않게)
+      } catch (e) { console.error('[퇴출 뒤 목록 갱신 오류]', e); }
+      if (r.already) { toast('이미 방에 없는 학생이에요.', 'ok'); return; }
+      const parts = [];
+      if (r.words) parts.push(`단어 ${r.words}개`);
+      if (r.questions) parts.push(`문제 ${r.questions}개`);
+      if (r.cards) parts.push(`채운 카드 ${r.cards}장`);
+      toast(`‘${r.nickname}’ 학생을 퇴출하고 자료를 모두 지웠어요${parts.length ? ` (${parts.join(', ')})` : ''}.`, 'ok');
+      if (r.leftover) toast('일부 자료가 남았을 수 있어요. 단어·문제 탭에서 확인해 주세요.', 'warn');
     } catch (e) { handleError(e, { teacher: true }); }
   }
 

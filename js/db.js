@@ -207,15 +207,14 @@ export async function getStudent(code, id) {
   return getDoc(studentRef(code, id));   // [읽기]
 }
 
-/** 같은 닉네임이 없을 때만 새로 만들어요. { created: true/false }
- *  counts: 이 이름으로 이미 낸 단어·문제 수(내보냈던 학생이 같은 이름으로 다시 들어올 때만 넣어요). 없으면 0개로 시작해요. */
-export async function createStudentIfAbsent(code, id, nickname, groupId, counts = null) {
+/** 같은 닉네임이 없을 때만 새로 만들어요. { created: true/false } */
+export async function createStudentIfAbsent(code, id, nickname, groupId) {
   const ref = studentRef(code, id);
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);   // [읽기]
     if (snap.exists()) return { created: false };
     tx.set(ref, {   // [쓰기]
-      nickname, groupId, studyScore: 0, wordCount: (counts && counts.wordCount) || 0, questionCount: (counts && counts.questionCount) || 0,
+      nickname, groupId, studyScore: 0, wordCount: 0, questionCount: 0,
       joinedAt: serverTimestamp(), lastSeen: serverTimestamp(), pingId: ''
     });
     return { created: true };
@@ -223,35 +222,72 @@ export async function createStudentIfAbsent(code, id, nickname, groupId, counts 
 }
 
 /**
- * 학생을 방에서 내보내요(이름을 잘못 쓴 경우 등).
- * 지우는 것은 "학생 기록 문서 1개"뿐이에요. 그 학생이 낸 단어·문제는 그대로 남아요.
- * 참가자 확인·게임 중에는 거절해요(게임 참가자 목록이 꼬이지 않게). 트랜잭션이라 시작 직전에 게임이 열려도 안전해요.
- * 돌려주는 값: { ok: true, nickname, score } | { ok: true, already: true } | { ok: false, reason: 'busy' | 'noroom' }
+ * 한 학생의 자료를 모두 지워요(퇴출용). 학생 기록 문서는 여기서 지우지 않아요.
+ *  - 그 학생이 직접 낸 단어 → 삭제
+ *  - 선생님이 나눠 준 카드를 그 학생이 채운 경우 → 카드 글자(단어)는 선생님 자료라 남기고, 학생이 쓴 뜻·예문·그림만 비워서 "담당자 없음"으로 되돌려요
+ *  - 그 학생이 낸 문제 → 삭제
+ * 돌려주는 값: { words, cards, questions, approvedWords, approvedQuestions }
+ */
+async function purgeStudentData(code, id) {
+  const [ws, qs] = await Promise.all([
+    getDocs(query(wordsCol(code), where('assignedTo', '==', id))),   // [읽기] 그 학생 카드 수만큼
+    getDocs(query(questionsCol(code), where('createdById', '==', id)))   // [읽기] 그 학생 문제 수만큼
+  ]);
+  const stat = { words: 0, cards: 0, questions: qs.size, approvedWords: false, approvedQuestions: false };
+  const wordOps = [];
+  ws.forEach((d) => {
+    const x = d.data();
+    if (x.origin === 'student') { stat.words++; wordOps.push({ ref: d.ref, del: true }); }
+    else { if (x.status !== 'assigned') stat.cards++; wordOps.push({ ref: d.ref, del: false }); }
+    if (x.status === 'approved') stat.approvedWords = true;
+  });
+  qs.forEach((d) => { if (d.data().status === 'approved') stat.approvedQuestions = true; });
+  await batchEach(wordOps, (b, o) => {   // [삭제/쓰기]
+    if (o.del) b.delete(o.ref);
+    else b.update(o.ref, { assignedTo: null, status: 'assigned', meaning: '', example: '', imageUrl: '', updatedAt: serverTimestamp() });
+  });
+  await batchEach(qs.docs, (b, d) => b.delete(d.ref));   // [삭제]
+  return stat;
+}
+
+/**
+ * 학생을 방에서 퇴출해요(이름을 잘못 쓴 경우 등). 그 학생의 자료가 모두 완전히 지워져요(되돌릴 수 없어요).
+ *  순서: ① 방 상태 확인 → ② 낸 단어·문제 지우기 → ③ 학생 기록 문서 지우기(트랜잭션) → ④ 그 사이에 새로 생긴 것이 없는지 한 번 더 지우기
+ *  학생 기록 문서가 먼저 사라지면 남은 자료를 찾아 지울 방법이 없으므로, 문서는 ③에서 맨 나중에 지워요.
+ *  ③ 이후에는 학생이 단어·문제를 새로 낼 수 없어요(학생 기록이 없으면 저장이 거절돼요).
+ * 참가자 확인·게임 중에는 거절해요(게임 참가자 목록이 꼬이지 않게).
+ * 돌려주는 값: { ok: true, nickname, score, words, cards, questions, approvedWords, approvedQuestions, leftover }
+ *            | { ok: true, already: true, ...같은 개수 } | { ok: false, reason: 'busy' | 'noroom' }
  */
 export async function kickStudent(code, id) {
   const rref = roomRef(code), sref = studentRef(code, id);
-  return runTransaction(db, async (tx) => {
+  const isBusy = (room) => { const gs = room.data().gameState; const mode = gs && gs.mode; return mode !== 'idle' && mode !== 'ranking'; };
+  const room0 = await getDoc(rref);   // [읽기] ① 지우기 전에 먼저 확인해요
+  if (!room0.exists()) return { ok: false, reason: 'noroom' };
+  if (isBusy(room0)) return { ok: false, reason: 'busy' };
+  const stat = await purgeStudentData(code, id);   // ②
+  const res = await runTransaction(db, async (tx) => {   // ③
     const room = await tx.get(rref);   // [읽기]
     if (!room.exists()) return { ok: false, reason: 'noroom' };
-    const gs = room.data().gameState;
-    const mode = gs && gs.mode;
-    if (mode !== 'idle' && mode !== 'ranking') return { ok: false, reason: 'busy' };
+    if (isBusy(room)) return { ok: false, reason: 'busy' };
     const s = await tx.get(sref);   // [읽기]
     if (!s.exists()) return { ok: true, already: true };
     const d = s.data();
     tx.delete(sref);   // [삭제]
-    tx.update(rref, { kickedIds: arrayUnion(id) });   // [쓰기] 같은 이름으로 다시 들어오면 낸 단어 수를 다시 세려고 적어 둬요
     return { ok: true, nickname: d.nickname || id, score: d.studyScore || 0 };
   });
-}
-
-/** 내보낸 학생에게 배정돼 있던 "아직 비어 있는" 교사 카드를 담당자 없음으로 돌려놔요(다른 학생에게 다시 나눠 줄 수 있게). 내용이 있는 카드는 그대로 둬요. */
-export async function releaseAssignedCards(code, id) {
-  const snap = await getDocs(query(wordsCol(code), where('assignedTo', '==', id)));   // [읽기] 그 학생 카드 수만큼
-  const empties = snap.docs.filter((d) => { const x = d.data(); return x.origin === 'teacher' && x.status === 'assigned'; });
-  if (!empties.length) return 0;
-  await batchEach(empties, (b, d) => b.update(d.ref, { assignedTo: null, updatedAt: serverTimestamp() }));   // [쓰기]
-  return empties.length;
+  if (!res.ok) {
+    // ①과 ③ 사이에 게임이 열린 아주 드문 경우: 학생은 남아 있으니, 개수 표시만 실제와 맞춰 둬요
+    try { await updateDoc(sref, { wordCount: 0, questionCount: 0 }); } catch { /* 학생 기록이 없으면 건너뛰어요 */ }   // [쓰기]
+    return res;
+  }
+  let leftover = false;
+  try {   // ④ ②와 ③ 사이에 낸 단어·문제가 있었다면 마저 지워요
+    const more = await purgeStudentData(code, id);
+    stat.words += more.words; stat.cards += more.cards; stat.questions += more.questions;
+    stat.approvedWords = stat.approvedWords || more.approvedWords; stat.approvedQuestions = stat.approvedQuestions || more.approvedQuestions;
+  } catch (e) { console.error('[퇴출 마무리 오류]', e); leftover = true; }
+  return { ...res, ...stat, leftover };
 }
 
 /** "나 접속 중이에요" 신호 */

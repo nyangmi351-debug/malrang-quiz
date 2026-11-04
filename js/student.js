@@ -7,7 +7,6 @@ import {
   GROUPS, groupBadge, mascot, toast, confirmDialog, showModal, handleError, initSound, soundToggleButton, topBar, setBanner, keepAwake
 } from './ui.js';
 import * as D from './db.js';
-import * as W from './words.js';
 import { screenWordNew, screenMyCards, screenMyWords, screenQuestionNew, screenMyQuestions } from './student-input.js';
 import { screenStudy, screenCards } from './study.js';
 import { createGameScreen } from './gamescreen.js';
@@ -120,10 +119,7 @@ export function startStudent(root, { onHome, prefillRoom = '', autoSaved = null 
   async function tryEnter(code, room, v, groupId) {
     const existing = await D.getStudent(code, v.id);   // [읽기]
     if (existing.exists()) { await enterExisting(code, room, v, groupId, existing.data()); return; }
-    // 선생님이 내보냈던 이름으로 다시 들어오면, 이미 낸 단어·문제 수를 세어서 개수 한도를 이어서 계산해요(그 밖의 입장은 읽기 0건 추가)
-    let counts = null;
-    if (Array.isArray(room.kickedIds) && room.kickedIds.includes(v.id)) { try { counts = await W.countOwned(code, v.id); } catch (e) { console.error(e); } }   // [읽기]
-    const { created } = await D.createStudentIfAbsent(code, v.id, v.nickname, groupId, counts);   // [읽기][쓰기]
+    const { created } = await D.createStudentIfAbsent(code, v.id, v.nickname, groupId);   // [읽기][쓰기]
     if (created) await enterRoom(code, v.id, v.nickname, room);
     else { const again = await D.getStudent(code, v.id); await enterExisting(code, room, v, groupId, again.data()); }
   }
@@ -345,7 +341,7 @@ export function startStudent(root, { onHome, prefillRoom = '', autoSaved = null 
     if (S.regroupModal) { S.regroupModal.close(); S.regroupModal = null; }
     goneHandled = false;
     mount(root, h('main', { class: 'screen center' }, h('div', { class: 'card center-card', dataset: { part: 'kicked' } }, mascot(96, 'wow'), h('h2', null, '방에서 나왔어요'),
-      h('p', { class: 'muted' }, '선생님이 이 이름을 방에서 내보냈어요. 이름을 잘못 썼다면 올바른 이름으로 다시 들어오면 돼요.'),
+      h('p', { class: 'muted' }, '선생님이 이 이름을 방에서 퇴출했어요. 이 이름으로 만든 기록은 모두 지워졌어요. 이름을 잘못 썼다면 올바른 이름으로 다시 들어오면 돼요.'),
       h('button', { class: 'btn primary big', type: 'button', dataset: { act: 'rejoin' }, onclick: () => showCodeStep(code) }, '다시 입장하기'),
       h('button', { class: 'btn ghost', type: 'button', onclick: onHome }, '처음으로'))));
   }

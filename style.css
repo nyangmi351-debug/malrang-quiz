@@ -108,9 +108,11 @@ details.card summary { cursor: pointer; font-weight: 700; }
 .group-col { background: #FFFCF6; border: 1px solid var(--line); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 .group-head { display: flex; justify-content: space-between; align-items: center; }
 .student-tile { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
-.student-tile .input { grid-column: 1 / 3; }
-.student-tile .kick-btn { grid-column: 3; border: 1px solid #f0b4b4; background: #fff; color: #c0392b; border-radius: 10px; min-height: 38px; padding: 4px 10px; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.student-tile .input { grid-column: 1 / -1; }
+.student-tile .sname-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+.student-tile .kick-btn { flex: 0 0 auto; border: 1px solid #f0b4b4; background: #fff; color: #c0392b; border-radius: 8px; min-height: 28px; padding: 1px 8px; font-size: .75rem; font-weight: 700; line-height: 1.2; cursor: pointer; }
 .student-tile .kick-btn:hover:not(:disabled) { background: #fff0f0; }
+.student-tile .kick-btn:focus-visible { outline: 2px solid #c0392b; outline-offset: 1px; }
 .student-tile .kick-btn:disabled { opacity: .45; cursor: not-allowed; }
 .student-tile .dot { width: 12px; height: 12px; border-radius: 50%; background: #C4C7D4; }
 .student-tile.online .dot { background: var(--ok); box-shadow: 0 0 0 3px #D6F3E3; }
