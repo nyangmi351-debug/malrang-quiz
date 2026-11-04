@@ -5,7 +5,7 @@
 
 import { h, mount, clear } from './core.js';
 import { PRESENCE_WINDOW_MS } from './config.js';
-import { mascot, toast, confirmDialog, handleError, startCountdown, keepAwake, setBanner } from './ui.js';
+import { mascot, toast, confirmDialog, handleError, startCountdown, keepAwake, setBanner, errorCard } from './ui.js';
 import { toMs } from './text.js';
 import { finalView } from './results.js';
 import * as D from './db.js';
@@ -71,33 +71,40 @@ export function createGameHost(T) {
   function stopTicker() { if (S.ticker) { S.ticker.stop(); S.ticker = null; } }
 
   /* ── 방 문서가 바뀔 때 ── */
+  // 진행자를 치울 때 오류가 나도 "진행자가 멈추지 않게" 항상 비우고 계속 진행해요
+  function disposeDriver() {
+    const d = S.driver; S.driver = null;
+    if (d) { try { d.dispose(); } catch (e) { console.error('[진행자 정리 오류]', e); } }
+  }
   function onRoom() {
     const gs = T.room.gameState;
     const prev = S.gs;
     if (prev && prev.seq === gs.seq && prev.gameId === gs.gameId) { S.gs = gs; return; }
-    const newGame = !prev || prev.gameId !== gs.gameId;
-    S.gs = gs;
-    S.schedules.clear();
-    S.stateSubs.splice(0).forEach((u) => u());
-    if (newGame) {
-      S.gameSubs.splice(0).forEach((u) => u());
-      S.known = new Set();
-      S.scores = null;
-      if (S.driver) { S.driver.dispose(); S.driver = null; }
-    }
-    const isGame = G.isGameMode(gs.mode);
-    keepAwake(isGame || gs.mode === 'confirm');
-    if (isGame && gs.driverId === T.tabId) {
-      if (!S.driver) S.driver = GAMES[gs.mode].createDriver(host);
-      ensureTicker();
-      try { S.driver.onState(gs); } catch (e) { console.error('[진행 오류]', e); }
-    } else {
-      if (S.driver) { S.driver.dispose(); S.driver = null; }
-      if (!isGame) stopTicker();
-      if (!isGame) S.gameSubs.splice(0).forEach((u) => u());
-    }
-    if (T.test && T.test.onGameState) T.test.onGameState(gs, host);
-    renderControl();
+    try {
+      const newGame = !prev || prev.gameId !== gs.gameId;
+      S.gs = gs;
+      S.schedules.clear();
+      S.stateSubs.splice(0).forEach((u) => u());
+      if (newGame) {
+        S.gameSubs.splice(0).forEach((u) => u());
+        S.known = new Set();
+        S.scores = null;
+        disposeDriver();
+      }
+      const isGame = G.isGameMode(gs.mode);
+      keepAwake(isGame || gs.mode === 'confirm');
+      if (isGame && gs.driverId === T.tabId) {
+        if (!S.driver) S.driver = GAMES[gs.mode].createDriver(host);
+        ensureTicker();
+        try { S.driver.onState(gs); } catch (e) { console.error('[진행 오류]', e); }
+      } else {
+        disposeDriver();
+        if (!isGame) stopTicker();
+        if (!isGame) S.gameSubs.splice(0).forEach((u) => u());
+      }
+      if (T.test && T.test.onGameState) T.test.onGameState(gs, host);
+    } catch (e) { console.error('[게임 진행자 오류]', e); }
+    try { renderControl(); } catch (e) { console.error('[진행 카드 그리기 오류]', e); }   // 위쪽 안내(참가자 확인 중 / 진행 카드)는 무슨 일이 있어도 갱신해요
   }
   function onVisibility() {
     if (document.visibilityState === 'hidden') { S.hiddenAt = Date.now(); return; }
@@ -178,7 +185,7 @@ export function createGameHost(T) {
   host.dispose = () => {
     S.offs.forEach((o) => o());
     document.removeEventListener('visibilitychange', onVisibility);
-    if (S.driver) S.driver.dispose();
+    disposeDriver();
     S.stateSubs.splice(0).forEach((u) => u());
     S.gameSubs.splice(0).forEach((u) => u());
     if (S.stopCountdown) S.stopCountdown();
@@ -203,15 +210,26 @@ export function mountGamesTab(box, T) {
   let ui = null;   // 확인 화면의 조각들 { confirmCard, groupInfo, startBtn, formBox } — 반드시 onRoom()을 부르기 "전에" 만들어 둬요
                    // (예전에는 이 줄이 아래에 있어서, 참가자 확인 중에 다른 탭에 갔다가 돌아오면 오류가 나고 화면이 멈췄어요)
 
-  const offs = [T.on('room', onRoom), T.on('students', () => { if (T.room.gameState.mode === 'confirm') drawConfirm(); })];
+  const offs = [T.on('room', onRoom), T.on('students', () => { if (T.room.gameState.mode === 'confirm') guard(() => drawConfirm()); })];
   onRoom();
+
+  /** 그리다가 오류가 나도 화면이 비어 버리지 않게, 원인과 [다시 시도]/[확인 취소] 버튼을 보여 줘요 */
+  function showFail(e) {
+    console.error('[게임 탭 그리기 오류]', e);
+    clearInterval(timer);
+    ui = null; formApi = null;   // 다음에는 화면 뼈대를 처음부터 다시 만들어요
+    const actions = [{ label: '다시 시도', primary: true, act: 'tab-retry', onClick: () => { lastGameKey = ''; onRoom(); } }];
+    if (T.room.gameState.mode === 'confirm') actions.push({ label: '참가자 확인 취소', act: 'tab-cancel', onClick: () => host.cancelConfirm() });
+    mount(body, errorCard({ title: '[게임] 탭을 그리다가 오류가 났어요', error: e, actions }));
+  }
+  function guard(fn) { try { fn(); } catch (e) { showFail(e); } }
 
   function onRoom() {
     const gs = T.room.gameState;
     const key = `${gs.mode}:${gs.gameId}:${gs.seq}`;
     if (key === lastGameKey) return;
     lastGameKey = key;
-    draw();
+    guard(draw);
   }
 
   function draw() {
@@ -306,7 +324,7 @@ export function mountGamesTab(box, T) {
 
   async function start() {
     const gs = T.room.gameState;
-    if (gs.mode !== 'confirm') return;
+    if (gs.mode !== 'confirm' || !ui) return;
     const def = GAMES[selected];
     const groupCount = T.room.settings.groupCount;
     const { participants } = currentParticipants();

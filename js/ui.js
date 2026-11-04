@@ -1,6 +1,6 @@
 // js/ui.js — 화면 부품(알림, 팝업, 말랑이 그림, 모둠 배지), 오류 안내, 효과음
 
-import { h, storeGet, storeSet } from './core.js';
+import { h, storeGet, storeSet, hardReload } from './core.js';
 import { APP_VERSION, TIMES } from './config.js';
 import { now } from './db.js';
 
@@ -334,6 +334,25 @@ document.addEventListener('visibilitychange', () => { if (wantAwake && document.
 
 /* ───────── 13. 탭 막대 ───────── */
 /** tabs: [{key,label,badge}] → 눌린 탭의 key로 onSelect를 불러요 */
+/**
+ * 화면을 그리다가 오류가 났을 때 "빈 화면" 대신 보여 주는 안내 카드예요.
+ * 무슨 오류인지(선생님이 사진을 찍어 보내 줄 수 있게) 글로 보여 주고, 다시 시도 / 새 파일 받기 버튼을 줘요.
+ * actions: [{ label, onClick, primary }]
+ */
+export function errorCard({ title = '이 화면을 그리다가 오류가 났어요', error, actions = [], hint } = {}) {
+  const msg = String((error && error.message) || error || '알 수 없는 오류');
+  const where = error && error.stack ? String(error.stack).split('\n').slice(0, 4).join('\n') : '';
+  return h('section', { class: 'card error-card', role: 'alert', dataset: { part: 'tab-error' } },
+    h('h3', null, `⚠️ ${title}`),
+    h('p', null, hint || '아래 [다시 시도]를 눌러 보세요. 그래도 안 되면 [최신 파일 다시 받기]를 눌러 주세요.'),
+    h('p', { class: 'error-msg', dataset: { part: 'error-msg' } }, msg),
+    h('div', { class: 'chips' },
+      ...actions.map((a) => h('button', { class: `btn ${a.primary ? 'primary' : 'ghost'}`, type: 'button', dataset: a.act ? { act: a.act } : {}, onclick: a.onClick }, a.label)),
+      h('button', { class: 'btn ghost', type: 'button', dataset: { act: 'hard-reload' }, onclick: hardReload }, '최신 파일 다시 받기')),
+    h('p', { class: 'muted' }, `앱 버전 ${APP_VERSION}`),
+    where ? h('details', null, h('summary', null, '자세한 내용(문의할 때 사진으로 보여 주세요)'), h('pre', { class: 'error-stack' }, where)) : null);
+}
+
 export function tabBar(tabs, active, onSelect) {
   const bar = h('div', { class: 'tabs', role: 'tablist' });
   tabs.forEach((t) => bar.append(h('button', {

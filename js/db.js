@@ -207,18 +207,51 @@ export async function getStudent(code, id) {
   return getDoc(studentRef(code, id));   // [읽기]
 }
 
-/** 같은 닉네임이 없을 때만 새로 만들어요. { created: true/false } */
-export async function createStudentIfAbsent(code, id, nickname, groupId) {
+/** 같은 닉네임이 없을 때만 새로 만들어요. { created: true/false }
+ *  counts: 이 이름으로 이미 낸 단어·문제 수(내보냈던 학생이 같은 이름으로 다시 들어올 때만 넣어요). 없으면 0개로 시작해요. */
+export async function createStudentIfAbsent(code, id, nickname, groupId, counts = null) {
   const ref = studentRef(code, id);
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);   // [읽기]
     if (snap.exists()) return { created: false };
     tx.set(ref, {   // [쓰기]
-      nickname, groupId, studyScore: 0, wordCount: 0, questionCount: 0,
+      nickname, groupId, studyScore: 0, wordCount: (counts && counts.wordCount) || 0, questionCount: (counts && counts.questionCount) || 0,
       joinedAt: serverTimestamp(), lastSeen: serverTimestamp(), pingId: ''
     });
     return { created: true };
   });
+}
+
+/**
+ * 학생을 방에서 내보내요(이름을 잘못 쓴 경우 등).
+ * 지우는 것은 "학생 기록 문서 1개"뿐이에요. 그 학생이 낸 단어·문제는 그대로 남아요.
+ * 참가자 확인·게임 중에는 거절해요(게임 참가자 목록이 꼬이지 않게). 트랜잭션이라 시작 직전에 게임이 열려도 안전해요.
+ * 돌려주는 값: { ok: true, nickname, score } | { ok: true, already: true } | { ok: false, reason: 'busy' | 'noroom' }
+ */
+export async function kickStudent(code, id) {
+  const rref = roomRef(code), sref = studentRef(code, id);
+  return runTransaction(db, async (tx) => {
+    const room = await tx.get(rref);   // [읽기]
+    if (!room.exists()) return { ok: false, reason: 'noroom' };
+    const gs = room.data().gameState;
+    const mode = gs && gs.mode;
+    if (mode !== 'idle' && mode !== 'ranking') return { ok: false, reason: 'busy' };
+    const s = await tx.get(sref);   // [읽기]
+    if (!s.exists()) return { ok: true, already: true };
+    const d = s.data();
+    tx.delete(sref);   // [삭제]
+    tx.update(rref, { kickedIds: arrayUnion(id) });   // [쓰기] 같은 이름으로 다시 들어오면 낸 단어 수를 다시 세려고 적어 둬요
+    return { ok: true, nickname: d.nickname || id, score: d.studyScore || 0 };
+  });
+}
+
+/** 내보낸 학생에게 배정돼 있던 "아직 비어 있는" 교사 카드를 담당자 없음으로 돌려놔요(다른 학생에게 다시 나눠 줄 수 있게). 내용이 있는 카드는 그대로 둬요. */
+export async function releaseAssignedCards(code, id) {
+  const snap = await getDocs(query(wordsCol(code), where('assignedTo', '==', id)));   // [읽기] 그 학생 카드 수만큼
+  const empties = snap.docs.filter((d) => { const x = d.data(); return x.origin === 'teacher' && x.status === 'assigned'; });
+  if (!empties.length) return 0;
+  await batchEach(empties, (b, d) => b.update(d.ref, { assignedTo: null, updatedAt: serverTimestamp() }));   // [쓰기]
+  return empties.length;
 }
 
 /** "나 접속 중이에요" 신호 */

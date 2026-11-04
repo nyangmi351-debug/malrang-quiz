@@ -14,6 +14,7 @@ index.html      앱의 시작 화면
 style.css       기본 디자인
 games.css       게임 화면 디자인
 guide.html      선생님 안내서
+version.json    버전 확인용 작은 파일 (index.html이 예전 것인지 알아내는 데 써요)
 js/             프로그램 파일 33개
 ```
 
@@ -21,6 +22,15 @@ js/             프로그램 파일 33개
 
 - 순수 HTML/CSS/JavaScript (빌드 과정 없음), Firebase Firestore (무료 Spark 요금제)
 - GitHub Pages로 그대로 공개할 수 있어요.
+
+## 새 버전을 올릴 때
+
+1. 압축을 푼 **파일과 폴더 전부**(index.html, style.css, games.css, guide.html, version.json, README.md, js 폴더)를 GitHub에 올려요.
+2. 1~2분 기다린 뒤 **Ctrl+Shift+R**(맥은 ⌘+Shift+R)로 새로고침해요.
+3. 방 화면 맨 위(“PIN … · v2.4-final”)와 화면 맨 아래에 같은 버전이 보이면 제대로 올라간 거예요.
+
+index.html이 js 파일 이름 뒤에 `?v=버전`을 붙여서 불러와요. 그래서 새 버전을 올리면 브라우저가 기억해 둔 예전 js 파일을 다시 쓰지 않아요.
+(버전을 올려서 직접 고칠 때는 index.html의 `BUILD`·`FILES`·css의 `?v=`, `js/config.js`의 `APP_VERSION`, `version.json`을 함께 바꿔야 해요.)
 
 ## 알아 둘 점
 

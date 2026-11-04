@@ -1,7 +1,7 @@
 // js/config.js — 설정 파일 (따로 채울 값은 없어요. 완성본입니다)
 // 교사 PIN은 이제 코드에 적어 두지 않아요. 선생님마다 앱 화면에서 직접 [새 PIN 만들기]로 만들어요.
 
-export const APP_VERSION = 'v2.2-final';   // 화면 맨 아래에 작게 보여요(배포 확인용). 업로드가 제대로 됐는지 확인할 때 써요
+export const APP_VERSION = 'v2.4-final';   // 화면 맨 아래에 작게 보여요(배포 확인용). 업로드가 제대로 됐는지 확인할 때 써요
 
 export const firebaseConfig = {
   apiKey: 'AIzaSyC-AJ4-A-mJvK8eOIEzfSLUJOMTRoGw35Q',

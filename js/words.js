@@ -82,6 +82,15 @@ export async function deleteStudentWord(code, sid, key) {
   });
 }
 
+/** 이 이름(sid)으로 이미 낸 단어·문제 수를 세어요. 내보냈던 학생이 같은 이름으로 다시 들어올 때, 개수 한도를 이어서 계산하려고 써요. */
+export async function countOwned(code, sid) {
+  const [w, q] = await Promise.all([
+    D.getDocs(D.query(D.wordsCol(code), D.where('assignedTo', '==', sid))),   // [읽기]
+    D.getDocs(D.query(D.questionsCol(code), D.where('createdById', '==', sid)))   // [읽기]
+  ]);
+  return { wordCount: w.docs.filter((d) => d.data().origin === 'student').length, questionCount: q.size };
+}
+
 export async function fetchMyWords(code, sid) {
   const snap = await D.getDocs(D.query(D.wordsCol(code), D.where('assignedTo', '==', sid)));   // [읽기] 내 카드 수만큼
   return snap.docs.map((d) => ({ key: d.id, ...d.data() }));

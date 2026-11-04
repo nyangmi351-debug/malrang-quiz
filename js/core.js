@@ -192,3 +192,14 @@ export async function renderQr(container, text, size = 168) {
   container.append(h('p', { class: 'qr-fallback' }, 'QR을 불러오지 못했어요. 아래 주소를 직접 입력해 주세요.'));
   return false;
 }
+
+
+/** 주소 뒤에 "새로 받기 표시(_r)"를 붙여서 다시 열어요. 브라우저가 기억해 둔 예전 파일 대신 새 파일을 받아 와요.
+ *  (index.html이 파일 이름 뒤에 _r 값을 붙여서 불러와요) */
+export function hardReload() {
+  try {
+    const u = new URL(location.href);
+    u.searchParams.set('_r', Date.now().toString(36));
+    location.replace(u.toString());
+  } catch { location.reload(); }
+}

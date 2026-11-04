@@ -5,7 +5,7 @@ import { h, mount, clear, sessionGet, sessionSet, sessionRemove, getTabId, build
 import { APP_VERSION, ROOM_LIST_LIMIT } from './config.js';
 import {
   mascot, toast, confirmDialog, showModal, handleError, initSound, soundToggleButton, playSound, SOUND_NAMES, topBar,
-  toggleFullscreen, setFooterExtra, tabBar
+  toggleFullscreen, setFooterExtra, tabBar, errorCard
 } from './ui.js';
 import * as D from './db.js';
 import { createTeacherData } from './teacher-data.js';
@@ -219,10 +219,12 @@ export function startTeacher(root, { onHome }) {
     sessionSet(ROOM_KEY, code);
     // T = 이 방 화면 전체가 함께 쓰는 "공용 보관함". 각 탭 파일이 여기서 방 정보와 학생 목록을 받아 가요.
     const handlers = { room: new Set(), students: new Set() };
+    let mountScope = null;   // 탭을 그리는 동안 등록된 "알림 받기"를 모아 둬요(그리다 실패하면 한꺼번에 치워요)
     const T = {
       code, pin, tabId: getTabId(), room: first, students: [], root,
-      on(evt, fn) { handlers[evt].add(fn); return () => handlers[evt].delete(fn); },
-      emit(evt) { [...handlers[evt]].forEach((fn) => fn()); },
+      on(evt, fn) { handlers[evt].add(fn); const off = () => handlers[evt].delete(fn); if (mountScope) mountScope.push(off); return off; },
+      // 한 곳에서 오류가 나도 나머지 화면(탭 막대, 방 정보 등)은 계속 갱신되게 하나씩 안전하게 불러요
+      emit(evt) { [...handlers[evt]].forEach((fn) => { try { fn(); } catch (e) { console.error(`[${evt}]`, e); } }); },
       addCleanup(fn) { cleanups.push(fn); },
       goTab: (key) => selectTab(key),
       leaveRoom: () => { showRoomList(); },
@@ -243,7 +245,7 @@ export function startTeacher(root, { onHome }) {
     const presentToggle = h('button', { class: 'btn small ghost', type: 'button', onclick: togglePresentMode }, '이 창을 발표 모드로');
 
     mount(root, h('main', { class: 'screen' },
-      topBar({ title: '방 화면', sub: `PIN ${pin}`, left: h('button', { class: 'icon-btn', type: 'button', title: '방 목록으로', onclick: showRoomList }, '←'), right: soundToggleButton() }),
+      topBar({ title: '방 화면', sub: `PIN ${pin} · ${APP_VERSION}`, left: h('button', { class: 'icon-btn', type: 'button', title: '방 목록으로', onclick: showRoomList }, '←'), right: soundToggleButton() }),
       infoCard, controlBox, tabsBox, tabBody));
 
     T.games.attachControl(controlBox);
@@ -294,13 +296,24 @@ export function startTeacher(root, { onHome }) {
       ], tabKey, selectTab));
     }
     function selectTab(key) {
-      if (disposeTab) { disposeTab(); disposeTab = null; }
+      if (disposeTab) { try { disposeTab(); } catch (e) { console.error(e); } disposeTab = null; }
       tabKey = key;
       sessionSet(TAB_KEY, key);
       drawTabs();
       const mounts = { students: mountStudentsTab, words: mountWordsTab, games: mountGamesTab, settings: mountSettingsTab };
       mount(tabBody);
-      disposeTab = (mounts[key] || mountStudentsTab)(tabBody, T) || null;
+      mountScope = [];
+      try {
+        disposeTab = (mounts[key] || mountStudentsTab)(tabBody, T) || null;
+      } catch (e) {
+        // 탭을 그리다 오류가 나도 "빈 화면"으로 두지 않고, 원인과 다시 시도 버튼을 보여 줘요
+        console.error('탭 그리기 오류', key, e);
+        mountScope.forEach((off) => { try { off(); } catch { /* 무시 */ } });
+        disposeTab = null;
+        const actions = [{ label: '다시 시도', primary: true, act: 'tab-retry', onClick: () => selectTab(key) }];
+        if (T.room.gameState && T.room.gameState.mode === 'confirm') actions.push({ label: '참가자 확인 취소', act: 'tab-cancel', onClick: () => T.games.cancelConfirm() });
+        mount(tabBody, errorCard({ title: '이 탭을 그리다가 오류가 났어요', error: e, actions }));
+      } finally { mountScope = null; }
     }
     cleanups.push(() => { if (disposeTab) disposeTab(); });
     selectTab(tabKey);

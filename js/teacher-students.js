@@ -77,7 +77,7 @@ export function mountStudentsTab(box, T) {
             h('span', { class: 'muted' }, `${list.length}명${gs !== null && gs !== undefined ? ` · 게임 ${gs}점` : ''}`)),
           list.map((s) => tile(s, isOnline(s), groupCount, inGame)));
       })),
-      inGame ? h('p', { class: 'muted' }, '게임 중에는 학생의 모둠을 바꿀 수 없어요.') : null);
+      inGame ? h('p', { class: 'muted' }, '참가자 확인·게임 중에는 학생의 모둠을 바꾸거나 내보낼 수 없어요.') : null);
   }
 
   function tile(s, online, groupCount, inGame) {
@@ -92,11 +92,35 @@ export function mountStudentsTab(box, T) {
       if (pendingRender) renderMonitor();
     });
     sel.addEventListener('blur', () => { if (pendingRender) setTimeout(renderMonitor, 0); });
+    const kickBtn = h('button', {
+      class: 'kick-btn', type: 'button', dataset: { act: 'kick', sid: s.id }, disabled: inGame,
+      title: inGame ? '참가자 확인·게임 중에는 내보낼 수 없어요' : '이 학생을 방에서 내보내요', 'aria-label': `${s.nickname} 내보내기`,
+      onclick: () => kick(s)
+    }, '내보내기');
     return h('div', { class: `student-tile ${online ? 'online' : 'offline'}${s.isFake ? ' fake' : ''}` },
       h('span', { class: 'dot', title: online ? '접속 중' : '접속 안 함' }),
       h('span', { class: 'sname' }, s.nickname),
       h('span', { class: 'sscore muted' }, `${s.studyScore || 0}점`),
-      sel);
+      sel, kickBtn);
+  }
+
+  /** 학생 내보내기(이름을 잘못 쓴 학생 등): 학생 기록만 지우고, 낸 단어·문제는 그대로 둬요 */
+  async function kick(s) {
+    const ok = await confirmDialog({
+      title: `‘${s.nickname}’ 학생을 내보낼까요?`,
+      message: `이 학생의 접속 기록과 공부하기 점수(${s.studyScore || 0}점)가 사라져요.\n이 학생이 낸 단어와 문제는 그대로 남아요.\n학생 화면은 입장 화면으로 돌아가고, 올바른 이름으로 다시 들어올 수 있어요.`,
+      okText: '내보내기', danger: true
+    });
+    if (!ok) return;
+    try {
+      const r = await D.kickStudent(T.code, s.id);   // [읽기][삭제][쓰기]
+      if (!r.ok) {
+        toast(r.reason === 'busy' ? '참가자 확인이나 게임이 진행 중이라 지금은 내보낼 수 없어요. 끝난 뒤에 해 주세요.' : '방을 찾을 수 없어요.', 'warn');
+        return;
+      }
+      toast(r.already ? '이미 방에 없는 학생이에요.' : `‘${r.nickname}’ 학생을 내보냈어요.`, 'ok');
+      try { await D.releaseAssignedCards(T.code, s.id); } catch (e) { console.error('[배정 카드 되돌리기 오류]', e); }   // [읽기][쓰기] 비어 있는 배정 카드만 담당자 없음으로
+    } catch (e) { handleError(e, { teacher: true }); }
   }
 
   return () => { offs.forEach((o) => o()); clearInterval(timer); };

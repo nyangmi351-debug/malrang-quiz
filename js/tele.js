@@ -168,6 +168,7 @@ function createDriver(host) {
   function draw() {
     if (!bodyEl || !bodyEl.isConnected) return;
     const gs = host.gs, p = P();
+    if (!p || !p.plan) return;   // 게임이 이미 끝나서 비어 있으면 그리지 않아요
     const nums = groupNums(p.plan);
     if (gs.phase === 'play') {
       const rows = nums.map((g) => {
@@ -218,7 +219,9 @@ function createDriver(host) {
       draw();
     },
     renderControl(body) { bodyEl = body; draw(); },
-    dispose() { toggleAuto(false); if (keyFn) document.removeEventListener('keydown', keyFn); keyFn = null; bodyEl = null; }
+    // 정리할 때는 화면을 다시 그리지 않아요. (예전에는 여기서 draw()가 불려서, 게임이 끝나 payload가 비어 있으면 오류가 났고
+    //  그 오류 때문에 게임 진행자가 멈춰서 "다음 게임의 진행 카드가 안 뜨는" 문제가 생겼어요)
+    dispose() { autoOn = false; if (auto) { clearInterval(auto); auto = null; } if (keyFn) document.removeEventListener('keydown', keyFn); keyFn = null; bodyEl = null; }
   };
 }
 

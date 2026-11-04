@@ -7,6 +7,7 @@ import {
   GROUPS, groupBadge, mascot, toast, confirmDialog, showModal, handleError, initSound, soundToggleButton, topBar, setBanner, keepAwake
 } from './ui.js';
 import * as D from './db.js';
+import * as W from './words.js';
 import { screenWordNew, screenMyCards, screenMyWords, screenQuestionNew, screenMyQuestions } from './student-input.js';
 import { screenStudy, screenCards } from './study.js';
 import { createGameScreen } from './gamescreen.js';
@@ -49,6 +50,7 @@ export function startStudent(root, { onHome, prefillRoom = '', autoSaved = null 
     get code() { return S.code; }, get id() { return S.id; }, get nickname() { return S.nickname; },
     room: () => S.room, me: () => S.me, refreshMe: () => refreshMe()
   };
+  let goneHandled = false;   // (반드시 위쪽에 둬요: 아래 함수들이 자동 재입장 중에 불릴 수 있어요)
   const headerBox = h('div');
   const statusBox = h('section', { class: 'card status-card' });
   let screenDispose = null;
@@ -118,7 +120,10 @@ export function startStudent(root, { onHome, prefillRoom = '', autoSaved = null 
   async function tryEnter(code, room, v, groupId) {
     const existing = await D.getStudent(code, v.id);   // [읽기]
     if (existing.exists()) { await enterExisting(code, room, v, groupId, existing.data()); return; }
-    const { created } = await D.createStudentIfAbsent(code, v.id, v.nickname, groupId);   // [읽기][쓰기]
+    // 선생님이 내보냈던 이름으로 다시 들어오면, 이미 낸 단어·문제 수를 세어서 개수 한도를 이어서 계산해요(그 밖의 입장은 읽기 0건 추가)
+    let counts = null;
+    if (Array.isArray(room.kickedIds) && room.kickedIds.includes(v.id)) { try { counts = await W.countOwned(code, v.id); } catch (e) { console.error(e); } }   // [읽기]
+    const { created } = await D.createStudentIfAbsent(code, v.id, v.nickname, groupId, counts);   // [읽기][쓰기]
     if (created) await enterRoom(code, v.id, v.nickname, room);
     else { const again = await D.getStudent(code, v.id); await enterExisting(code, room, v, groupId, again.data()); }
   }
@@ -139,7 +144,10 @@ export function startStudent(root, { onHome, prefillRoom = '', autoSaved = null 
       const meSnap = roomSnap.exists() ? await D.getStudent(saved.room, saved.id) : null;   // [읽기]
       if (!roomSnap.exists() || !meSnap.exists()) {
         storeRemove(SAVED_KEY);
-        showCodeStep(prefillRoom, roomSnap.exists() ? '' : '저장되어 있던 방이 사라졌어요. 새 방 코드를 입력해 주세요.');
+        if (roomSnap.exists()) {   // 선생님이 내보냈거나 학생 기록이 지워진 경우: 같은 방의 이름 입력 화면으로 바로 안내해요
+          showCodeStep(saved.room);
+          toast('이 방에서 이름이 지워져 있어요. 올바른 이름으로 다시 입장해 주세요.', 'info', { ms: 6000 });
+        } else showCodeStep(prefillRoom, '저장되어 있던 방이 사라졌어요. 새 방 코드를 입력해 주세요.');
         return;
       }
       await enterRoom(saved.room, saved.id, meSnap.data().nickname || saved.nickname, roomSnap.data(), { auto: true });
@@ -166,6 +174,11 @@ export function startStudent(root, { onHome, prefillRoom = '', autoSaved = null 
       S.epoch = epoch;
       onRoomUpdate(false);
     }, (e) => handleError(e, {})));
+    // 내 학생 문서를 지켜봐요: 선생님이 내보내면(문서가 사라지면) 바로 안내 화면으로 가요 [읽기] 처음 1번 + 내 문서가 바뀔 때만
+    unsubs.push(D.onSnapshot(D.studentRef(code, id), (snap) => {
+      if (snap.exists() || (snap.metadata && snap.metadata.fromCache)) return;   // 인터넷이 끊겨서 비어 보이는 경우는 무시해요
+      onStudentGone();
+    }, (e) => console.error('[내 문서 듣기 오류]', e)));
     timers.push(setInterval(heartbeat, HEARTBEAT_MS));
     document.addEventListener('visibilitychange', onVisibility);
   }
@@ -173,7 +186,7 @@ export function startStudent(root, { onHome, prefillRoom = '', autoSaved = null 
   async function refreshMe() {
     try {
       const snap = await D.getStudent(S.code, S.id);   // [읽기]
-      if (!snap.exists()) { storeRemove(SAVED_KEY); showRoomDeleted(); return; }
+      if (!snap.exists()) { await onStudentGone(); return; }
       S.me = snap.data();
       renderHeader();
       ensureGroup();
@@ -319,6 +332,24 @@ export function startStudent(root, { onHome, prefillRoom = '', autoSaved = null 
     if (S.regroupModal) { S.regroupModal.close(); S.regroupModal = null; }
     onHome();
   }
+  /** 내 학생 문서가 사라졌어요 → 방이 지워진 건지, 선생님이 나를 내보낸 건지 구분해서 안내해요 */
+  async function onStudentGone() {
+    if (goneHandled) return;
+    goneHandled = true;
+    const code = S.code;
+    let roomAlive = true;
+    try { const r = await D.getRoom(code); roomAlive = r.exists(); } catch { /* 확인하지 못하면 내보낸 것으로 봐요 */ }   // [읽기]
+    if (!roomAlive) { goneHandled = false; showRoomDeleted(); return; }
+    storeRemove(SAVED_KEY);
+    cleanup();
+    if (S.regroupModal) { S.regroupModal.close(); S.regroupModal = null; }
+    goneHandled = false;
+    mount(root, h('main', { class: 'screen center' }, h('div', { class: 'card center-card', dataset: { part: 'kicked' } }, mascot(96, 'wow'), h('h2', null, '방에서 나왔어요'),
+      h('p', { class: 'muted' }, '선생님이 이 이름을 방에서 내보냈어요. 이름을 잘못 썼다면 올바른 이름으로 다시 들어오면 돼요.'),
+      h('button', { class: 'btn primary big', type: 'button', dataset: { act: 'rejoin' }, onclick: () => showCodeStep(code) }, '다시 입장하기'),
+      h('button', { class: 'btn ghost', type: 'button', onclick: onHome }, '처음으로'))));
+  }
+
   function showRoomDeleted() {
     storeRemove(SAVED_KEY);
     cleanup();
